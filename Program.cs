@@ -98,15 +98,19 @@ while (true)
     }
     else
     {
-        string rawText = recognizer.ReadSpecificText(bounds.X, bounds.Y);
+        Bitmap capturedImage;
+        string rawText = recognizer.ReadSpecificText(bounds.X, bounds.Y, out capturedImage);
         Console.WriteLine(rawText);
 
-        var extractedText = OcrCorrector.ExtractMissionName(rawText);
+        var extractionResult = OcrCorrector.ExtractMissionName(rawText);
+        string extractedText = extractionResult.Name;
+        string category = extractionResult.Category;
+
         Console.WriteLine(extractedText);
 
-        if (extractedText != "미발견" && lastMessage != extractedText)
+        if (category != "None" && lastMessage != extractedText)
         {
-            if (extractedText.Contains("알 수 없는 습격전"))
+            if (category == "Unknown")
             {
                 Match match = Regex.Match(rawText, @"상위\s*(\d+)");
                 if (match.Success)
@@ -117,9 +121,10 @@ while (true)
 
                 if ((DateTime.Now - lastUnknownRaidTime).TotalMinutes < 5)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미 30분 이내에 알 수 없는 습격전을 알렸습니다. (알람 스킵)");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미 5분 이내에 알 수 없는 습격전을 알렸습니다. (알람 스킵)");
 
                     // 주의: 스킵하더라도 화면에 텍스트가 떠있는 동안 콘솔이 도배되는 것을 막기 위해 똑같이 2분간 재웁니다.
+                    if (capturedImage != null) capturedImage.Dispose();
                     await Task.Delay(TimeSpan.FromMinutes(2));
                     continue;
                 }
@@ -127,30 +132,62 @@ while (true)
                 // 30분이 지났다면 마지막 발생 시간을 현재로 갱신
                 lastUnknownRaidTime = DateTime.Now;
             }
-            else // "알 수 없는 습격전"이 아닌 일반 습격전일 경우
+            else // "알 수 없는 습격전"이 아닌 일반 습격전이거나 어설트일 경우
             {
                 // HashSet에 이미 등록되어 있는지 확인
                 if (todayAnnouncedRaids.Contains(extractedText))
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 오늘 이미 알림이 전송된 습격전입니다: {extractedText} (알람 스킵)");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 오늘 이미 알림이 전송된 습격전/어설트입니다: {extractedText} (알람 스킵)");
+                    if (capturedImage != null) capturedImage.Dispose();
                     await Task.Delay(1000);
                     continue;
                 }
 
-                // 처음 발생한 습격전이면 HashSet에 추가
+                // 처음 발생한 습격전/어설트이면 HashSet에 추가
                 todayAnnouncedRaids.Add(extractedText);
             }
 
             lastMessage = extractedText;
             lastMessageTime = DateTime.Now;
 
+            // 이미지 저장 로직 추가
+            if (capturedImage != null)
+            {
+                try
+                {
+                    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                    string targetFolder = Path.Combine(desktopPath, category);
+
+                    if (!Directory.Exists(targetFolder))
+                    {
+                        Directory.CreateDirectory(targetFolder);
+                    }
+
+                    // 파일명에 사용할 수 없는 문자 제거
+                    string safeFileName = string.Join("_", extractedText.Split(Path.GetInvalidFileNameChars()));
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string filePath = Path.Combine(targetFolder, $"{timestamp}_{safeFileName}.png");
+
+                    capturedImage.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미지 저장 완료: {filePath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미지 저장 실패: {ex.Message}");
+                }
+            }
+
             Console.WriteLine("잠시 후에 " + extractedText + "(이)가 시작됩니다.");
-            await DiscordNotifier.SendMessageAsync("잠시 후에 " + extractedText + "(이)가 시작됩니다.");
+            // 디스코드로 보내지 않고 콘솔에만 출력
+            // await DiscordNotifier.SendMessageAsync("잠시 후에 " + extractedText + "(이)가 시작됩니다.");
 
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 알람 발송 완료! 2분 동안 OCR 감지를 일시 중지합니다.");
+            if (capturedImage != null) capturedImage.Dispose();
             await Task.Delay(TimeSpan.FromMinutes(2));
             continue;
         }
+
+        if (capturedImage != null) capturedImage.Dispose();
     }
 
     // 동작 시간 중에는 2초마다 캡처를 수행합니다. (1초보다 전력 소모가 적고 안정적입니다)

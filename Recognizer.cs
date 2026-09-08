@@ -50,32 +50,31 @@ namespace Notifier
             }
         }
 
-        public string ReadSpecificText(int windowBoundsX, int windowBoundsY)
+        public string ReadSpecificText(int windowBoundsX, int windowBoundsY, out Bitmap capturedImage)
         {
             int width = relativeEndX - relativeStartX;
             int height = relativeEndY - relativeStartY;
             int absoluteX = windowBoundsX + relativeStartX;
             int absoluteY = windowBoundsY + relativeStartY;
 
-            using (Bitmap rawImage = CaptureCoordinateArea(absoluteX, absoluteY, width, height))
+            capturedImage = CaptureCoordinateArea(absoluteX, absoluteY, width, height);
+
+            if (capturedImage == null) return string.Empty;
+
+            // 플랜 A 시도: 픽셀을 또렷하게 유지하는 방식 (NearestNeighbor)
+            string resultA = ProcessOcrWithStrategy(capturedImage, System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor);
+
+            // 결과가 충분히 길고 유의미한지 확인 (예: 5글자 이상이면 성공으로 간주)
+            if (!string.IsNullOrEmpty(resultA) && resultA.Length > 5)
             {
-                if (rawImage == null) return string.Empty;
-
-                // 플랜 A 시도: 픽셀을 또렷하게 유지하는 방식 (NearestNeighbor)
-                string resultA = ProcessOcrWithStrategy(rawImage, System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor);
-
-                // 결과가 충분히 길고 유의미한지 확인 (예: 5글자 이상이면 성공으로 간주)
-                if (!string.IsNullOrEmpty(resultA) && resultA.Length > 5)
-                {
-                    return resultA;
-                }
-
-                // 플랜 B 시도: 플랜 A가 실패했거나 글자가 다 깨졌다면, 예전 방식인 부드러운 확대(Bicubic)로 재시도
-                Console.WriteLine("[OCR] 플랜 A 실패. 플랜 B(Bicubic)로 재시도합니다.");
-                string resultB = ProcessOcrWithStrategy(rawImage, System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic);
-
-                return resultB;
+                return resultA;
             }
+
+            // 플랜 B 시도: 플랜 A가 실패했거나 글자가 다 깨졌다면, 예전 방식인 부드러운 확대(Bicubic)로 재시도
+            Console.WriteLine("[OCR] 플랜 A 실패. 플랜 B(Bicubic)로 재시도합니다.");
+            string resultB = ProcessOcrWithStrategy(capturedImage, System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic);
+
+            return resultB;
         }
 
         // 중복되는 OCR 처리 로직을 별도의 메서드로 분리 (전략 패턴 적용)

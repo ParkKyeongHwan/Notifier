@@ -87,28 +87,28 @@
             { "상위", "알 수 없는 습격전" }
         };
 
-        public static string ExtractMissionName(string rawOcrText)
+        public static (string Name, string Category) ExtractMissionName(string rawOcrText)
         {
             // 1. OCR의 불필요한 공백과 줄바꿈을 모두 제거
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
 
             // 제외 키워드(어설트) 검사
-            //foreach (var ignored in IgnoredKeywords)
-            //{
-            //    if (cleanText.Length < ignored.Length) continue;
+            foreach (var ignored in IgnoredKeywords)
+            {
+                if (cleanText.Length < ignored.Length) continue;
 
-            //    for (int i = 0; i <= cleanText.Length - ignored.Length; i++)
-            //    {
-            //        string window = cleanText.Substring(i, ignored.Length);
-            //        int allowedErrors = ignored.Length >= 5 ? 2 : 1;
+                for (int i = 0; i <= cleanText.Length - ignored.Length; i++)
+                {
+                    string window = cleanText.Substring(i, ignored.Length);
+                    int allowedErrors = ignored.Length >= 5 ? 2 : 1;
 
-            //        if (ComputeLevenshteinDistance(window, ignored) <= allowedErrors)
-            //        {
-            //            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 제외 대상 어설트 감지 ('{ignored}'). 습격전 검사를 스킵합니다.");
-            //            return "미발견";
-            //        }
-            //    }
-            //}
+                    if (ComputeLevenshteinDistance(window, ignored) <= allowedErrors)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 어설트 감지 ('{ignored}').");
+                        return ($"어설트 ({ignored})", "Assault");
+                    }
+                }
+            }
 
             string bestMatchName = string.Empty;
             int bestErrorCount = int.MaxValue; // 가장 적은 오타 수 기록
@@ -139,7 +139,7 @@
                         // 완벽히 일치(오타 0)하면 무조건 정답이므로 즉시 반환!
                         if (errorCount == 0)
                         {
-                            return fullName;
+                            return (fullName, "Success");
                         }
 
                         if (errorCount < bestErrorCount)
@@ -152,9 +152,13 @@
             }
 
             // 가장 정확도 높은 결과를 찾았다면 반환(예: 1~2글자 오타로 통과한 최고 점수)
-            if (bestMatchName != null)
+            if (!string.IsNullOrEmpty(bestMatchName))
             {
-                return bestMatchName;
+                if (bestMatchName == "알 수 없는 습격전")
+                {
+                    return (bestMatchName, "Unknown");
+                }
+                return (bestMatchName, "Success");
             }
 
             // 구체적인 미션을 못 찾았을 경우 "습격전" 이라는 단어가 있는지 확인
@@ -167,7 +171,7 @@
                     // "습격전"(3글자)이므로 오타 1개까지는 허용하여 융통성 있게 검사
                     if (ComputeLevenshteinDistance(window, fallbackKeyword) <= 1)
                     {
-                        return "알 수 없는 습격전";
+                        return ("알 수 없는 습격전", "Unknown");
                     }
                 }
             }
@@ -175,10 +179,10 @@
             // 최후의 수단: OCR이 심하게 깨져서 "습" 또는 "격" 단 한 글자만 인식된 경우
             if (cleanText.Contains("습") || cleanText.Contains("격"))
             {
-                return "알 수 없는 습격전";
+                return ("알 수 없는 습격전", "Unknown");
             }
 
-            return "미발견";
+            return ("미발견", "None");
         }
 
         private static int ComputeLevenshteinDistance(string s, string t)
