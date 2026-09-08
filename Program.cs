@@ -1,6 +1,7 @@
 ﻿using Notifier;
 using System.Drawing;
 using System.Text.RegularExpressions;
+using Spectre.Console;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
@@ -30,12 +31,25 @@ if (handle != IntPtr.Zero)
 
 Console.SetWindowSize(80, 5);
 
+// Spectre.Console을 이용한 동작 모드 선택
+var modeSelection = AnsiConsole.Prompt(
+    new SelectionPrompt<string>()
+        .Title("동작 모드를 선택하세요:")
+        .PageSize(10)
+        .AddChoices(new[] {
+            "1. 지정 시간 동작 (19:00 ~ 00:59)",
+            "2. 24시간 동작"
+        }));
+
+bool run24Hours = modeSelection == "2. 24시간 동작";
+AnsiConsole.MarkupLine($"선택된 모드: [green]{modeSelection}[/]");
+
 while (true)
 {
     DateTime now = DateTime.Now;
 
-    // 현재 시간이 동작 시간(19시~0시 59분)인지 체크
-    bool isActiveTime = (now.Hour >= 19 || now.Hour < 1);
+    // 현재 시간이 동작 시간(19시~0시 59분)인지 체크 (24시간 모드면 항상 true)
+    bool isActiveTime = run24Hours || (now.Hour >= 19 || now.Hour < 1);
 
     if (!isActiveTime)
     {
@@ -210,7 +224,7 @@ void Spoide(string targetWindow, Recognizer recognizer)
 
         using (Bitmap bmp = recognizer.CaptureCoordinateArea(pos.X, pos.Y, 1, 1))
         {
-            Color c = bmp.GetPixel(0, 0);
+            System.Drawing.Color c = bmp.GetPixel(0, 0);
             Console.WriteLine($"[상대좌표] 상대X: {relativeX}, 상대Y: {relativeY} | R:{c.R}, G:{c.G}, B:{c.B}");
         }
         Thread.Sleep(500);
