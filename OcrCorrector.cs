@@ -93,6 +93,9 @@
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
 
             // 제외 키워드(어설트) 검사
+            string bestAssaultMatch = string.Empty;
+            int bestAssaultLength = -1;
+
             foreach (var ignored in IgnoredKeywords)
             {
                 if (cleanText.Length < ignored.Length) continue;
@@ -100,14 +103,29 @@
                 for (int i = 0; i <= cleanText.Length - ignored.Length; i++)
                 {
                     string window = cleanText.Substring(i, ignored.Length);
-                    int allowedErrors = ignored.Length >= 5 ? 2 : 1;
+
+                    // 짧은 단어(2글자 이하)는 오타를 허용하지 않음 (false positive 방지)
+                    int allowedErrors = 0;
+                    if (ignored.Length >= 5) allowedErrors = 2;
+                    else if (ignored.Length >= 3) allowedErrors = 1;
 
                     if (ComputeLevenshteinDistance(window, ignored) <= allowedErrors)
                     {
-                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 어설트 감지 ('{ignored}').");
-                        return ($"어설트 ({ignored})", "Assault");
+                        // "어설트" 같은 공통 단어보다 길고 구체적인 단어(예: "경성역", "피라미드")를 우선함
+                        if (ignored.Length > bestAssaultLength ||
+                            (ignored.Length == bestAssaultLength && ignored != "어설트" && ignored != "침공"))
+                        {
+                            bestAssaultMatch = ignored;
+                            bestAssaultLength = ignored.Length;
+                        }
                     }
                 }
+            }
+
+            if (!string.IsNullOrEmpty(bestAssaultMatch))
+            {
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 어설트 감지 ('{bestAssaultMatch}').");
+                return ($"어설트 ({bestAssaultMatch})", "Assault");
             }
 
             string bestMatchName = string.Empty;
@@ -131,8 +149,10 @@
                     int errorCount = ComputeLevenshteinDistance(window, targetKeyword);
 
                     // ★ 동적 오타 허용치 적용
-                    // 키워드가 3~4글자면 오타 1개 허용, 5글자 이상이면 2개 허용
-                    int allowedErrors = targetKeyword.Length >= 5 ? 2 : 1;
+                    // 키워드가 2글자 이하면 오타 허용 안함, 3~4글자면 오타 1개 허용, 5글자 이상이면 2개 허용
+                    int allowedErrors = 0;
+                    if (targetKeyword.Length >= 5) allowedErrors = 2;
+                    else if (targetKeyword.Length >= 3) allowedErrors = 1;
 
                     if (errorCount <= allowedErrors)
                     {
