@@ -195,9 +195,9 @@ while (true)
             // 디스코드로 보내지 않고 콘솔에만 출력
             // await DiscordNotifier.SendMessageAsync("잠시 후에 " + extractedText + "(이)가 시작됩니다.");
 
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 알람 발송 완료! 2분 동안 OCR 감지를 일시 중지합니다.");
+            //Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 알람 발송 완료! 2분 동안 OCR 감지를 일시 중지합니다.");
             if (capturedImage != null) capturedImage.Dispose();
-            await Task.Delay(TimeSpan.FromMinutes(2));
+            //await Task.Delay(TimeSpan.FromMinutes(2));
             continue;
         }
 
