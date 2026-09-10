@@ -135,31 +135,34 @@ while (true)
         {
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                string targetFolder = Path.Combine(desktopPath, category);
-
-                if (!Directory.Exists(targetFolder))
+                if (category != "Assault")
                 {
-                    Directory.CreateDirectory(targetFolder);
-                }
+                    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                    string targetFolder = Path.Combine(desktopPath, category);
 
-                // 파일명에 사용할 수 없는 문자 제거 및 공백/개행 제거
-                string cleanName = extractedText.Replace("\r", "").Replace("\n", " ");
-                if (cleanName.Length > 50)
-                {
-                    cleanName = cleanName.Substring(0, 50); // 너무 길면 자름
-                }
-                string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
-                if (string.IsNullOrWhiteSpace(safeFileName))
-                {
-                    safeFileName = "UnknownText";
-                }
+                    if (!Directory.Exists(targetFolder))
+                    {
+                        Directory.CreateDirectory(targetFolder);
+                    }
 
-                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string filePath = Path.Combine(targetFolder, $"{timestamp}_{safeFileName}.png");
+                    // 파일명에 사용할 수 없는 문자 제거 및 공백/개행 제거
+                    string cleanName = extractedText.Replace("\r", "").Replace("\n", " ");
+                    if (cleanName.Length > 50)
+                    {
+                        cleanName = cleanName.Substring(0, 50); // 너무 길면 자름
+                    }
+                    string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
+                    if (string.IsNullOrWhiteSpace(safeFileName))
+                    {
+                        safeFileName = "UnknownText";
+                    }
 
-                capturedImage.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미지 저장 완료: {filePath} (Category: {category})");
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    string filePath = Path.Combine(targetFolder, $"{timestamp}_{safeFileName}.png");
+
+                    capturedImage.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미지 저장 완료: {filePath} (Category: {category})");
+                }
             }
             catch (Exception ex)
             {
