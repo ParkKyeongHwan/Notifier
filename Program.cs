@@ -273,7 +273,23 @@ void RunFailFolderReanalysis(Recognizer rec)
         }
         string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
 
-        string newFileName = $"{Path.GetFileNameWithoutExtension(file)}_{safeFileName}.png";
+        // 기존 파일명에서 맨 앞의 타임스탬프(예: 20240513_193818)만 추출 시도
+        string oldFileName = Path.GetFileNameWithoutExtension(file);
+        string timestamp = "";
+
+        // 정규식을 사용하여 8자리_6자리 패턴을 찾음
+        Match tsMatch = Regex.Match(oldFileName, @"^(\d{8}_\d{6})");
+        if (tsMatch.Success)
+        {
+            timestamp = tsMatch.Groups[1].Value + "_";
+        }
+        else
+        {
+            // 타임스탬프 패턴이 없으면 현재 시간 사용
+            timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_";
+        }
+
+        string newFileName = $"{timestamp}{safeFileName}.png";
 
         if (result.Category == "Success" && !result.Name.Contains("알 수 없는") && !result.Name.Contains("알수없는"))
         {
