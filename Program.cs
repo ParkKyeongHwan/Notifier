@@ -213,37 +213,44 @@ void RunFailFolderReanalysis(Recognizer rec)
         Console.WriteLine($"[에러] 로그 파일을 생성할 수 없습니다: {ex.Message}");
     }
 
-    // 0. Unknown 폴더 검사: "알 수 없는 습격전_"과 실제 미션 이름이 동시에 포함된 오분류 파일 복구
-    if (Directory.Exists(unknownFolder))
+    // 0. Unknown 및 Temp 폴더 검사: "알 수 없는 습격전_"과 실제 미션 이름이 동시에 포함된 오분류 파일 복구
+    string[] foldersToCheck = { unknownFolder, tempFolder };
+    foreach (var folder in foldersToCheck)
     {
-        Console.WriteLine("Unknown 폴더에서 오분류된 '알 수 없는 습격전' 이미지를 찾아 Success 폴더로 이동합니다...");
-        var unknownFiles = Directory.GetFiles(unknownFolder, "*.png");
-        int movedToSuccess = 0;
-
-        if (!Directory.Exists(successFolder)) Directory.CreateDirectory(successFolder);
-
-        foreach (var uFile in unknownFiles)
+        if (Directory.Exists(folder))
         {
-            string fileName = Path.GetFileName(uFile);
-            // "알 수 없는 습격전_" 과 또 다른 "습격전" 이름이 포함된 경우
-            if (fileName.Contains("알 수 없는 습격전_") && fileName.LastIndexOf("습격전") > fileName.IndexOf("알 수 없는 습격전_"))
+            Console.WriteLine($"{Path.GetFileName(folder)} 폴더에서 오분류된 '알 수 없는 습격전' 이미지를 찾아 Success 폴더로 이동합니다...");
+            var files = Directory.GetFiles(folder, "*.png");
+            int movedToSuccess = 0;
+
+            if (!Directory.Exists(successFolder)) Directory.CreateDirectory(successFolder);
+
+            foreach (var file in files)
             {
-                string newFileName = fileName.Replace("알 수 없는 습격전_", "");
-                string targetPath = Path.Combine(successFolder, newFileName);
-                try
+                string fileName = Path.GetFileName(file);
+                // "알 수 없는 습격전_" 과 또 다른 "습격전" 이름이 포함된 경우
+                if (fileName.Contains("알 수 없는 습격전_") && fileName.LastIndexOf("습격전") > fileName.IndexOf("알 수 없는 습격전_"))
                 {
-                    if (File.Exists(targetPath)) File.Delete(targetPath);
-                    File.Move(uFile, targetPath);
-                    movedToSuccess++;
-                    Console.WriteLine($"  -> 복구됨: {fileName} -> {newFileName}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  -> 복구 실패 ({fileName}): {ex.Message}");
+                    string newFileName = fileName.Replace("알 수 없는 습격전_", "");
+                    string targetPath = Path.Combine(successFolder, newFileName);
+                    try
+                    {
+                        if (File.Exists(targetPath)) File.Delete(targetPath);
+                        File.Move(file, targetPath);
+                        movedToSuccess++;
+                        Console.WriteLine($"  -> 복구됨: {fileName} -> {newFileName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  -> 복구 실패 ({fileName}): {ex.Message}");
+                    }
                 }
             }
+            if (movedToSuccess > 0)
+            {
+                Console.WriteLine($"복구 완료: 총 {movedToSuccess}개의 파일을 {Path.GetFileName(folder)}에서 Success 폴더로 이동했습니다.\n");
+            }
         }
-        Console.WriteLine($"복구 완료: 총 {movedToSuccess}개의 파일을 Success 폴더로 이동했습니다.\n");
     }
 
     // 1. Success 폴더 검사: "알 수 없는 습격전"이 포함된 파일들을 Unknown 폴더로 이동
