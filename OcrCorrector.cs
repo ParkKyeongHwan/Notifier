@@ -145,7 +145,7 @@ using System.IO;
         };
 
         // 미션별 인원수 매핑 (인원수를 기준으로 후보를 필터링하기 위함)
-        private static readonly Dictionary<string, int> MissionPeopleCount = new Dictionary<string, int>
+        public static readonly Dictionary<string, int> MissionPeopleCount = new Dictionary<string, int>
         {
             // 3명
             { "한계농지 논밭 습격전 (상위 3명)", 3 },
