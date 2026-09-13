@@ -179,6 +179,13 @@ while (true)
                     string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                     string filePath = Path.Combine(targetFolder, $"{timestamp}_{safeFileName}.png");
 
+                    int counter = 1;
+                    while (File.Exists(filePath))
+                    {
+                        filePath = Path.Combine(targetFolder, $"{timestamp}_{safeFileName}_{counter}.png");
+                        counter++;
+                    }
+
                     capturedImage.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
                     Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 이미지 저장 완료: {filePath} (Category: {category})");
                 }
@@ -628,11 +635,22 @@ void RunFailFolderReanalysis(Recognizer rec)
         if (result.Category == "Success" && !result.Name.Contains("알 수 없는") && !result.Name.Contains("알수없는"))
         {
             string targetPath = Path.Combine(tempFolder, newFileName);
+
+            int counter = 1;
+            while (File.Exists(targetPath) && file != targetPath)
+            {
+                string nameWithoutExt = Path.GetFileNameWithoutExtension(newFileName);
+                targetPath = Path.Combine(tempFolder, $"{nameWithoutExt}_{counter}.png");
+                counter++;
+            }
+
             try
             {
-                if (File.Exists(targetPath)) File.Delete(targetPath);
-                File.Move(file, targetPath);
-                Console.WriteLine($"  -> [성공] Temp 폴더로 이동됨: {newFileName}\n");
+                if (file != targetPath)
+                {
+                    File.Move(file, targetPath);
+                    Console.WriteLine($"  -> [성공] Temp 폴더로 이동됨: {Path.GetFileName(targetPath)}\n");
+                }
                 successCount++;
             }
             catch (Exception ex)
@@ -643,17 +661,25 @@ void RunFailFolderReanalysis(Recognizer rec)
         else if (result.Category == "Unknown" || result.Name.Contains("알 수 없는") || result.Name.Contains("알수없는"))
         {
             string targetPath = Path.Combine(unknownFolder, newFileName);
+
+            int counter = 1;
+            while (File.Exists(targetPath) && file != targetPath)
+            {
+                string nameWithoutExt = Path.GetFileNameWithoutExtension(newFileName);
+                targetPath = Path.Combine(unknownFolder, $"{nameWithoutExt}_{counter}.png");
+                counter++;
+            }
+
             try
             {
                 if (file != targetPath)
                 {
-                    if (File.Exists(targetPath)) File.Delete(targetPath);
                     File.Move(file, targetPath);
-                    Console.WriteLine($"  -> [Unknown] Unknown 폴더로 이동됨: {newFileName}\n");
+                    Console.WriteLine($"  -> [Unknown] Unknown 폴더로 이동됨: {Path.GetFileName(targetPath)}\n");
                 }
                 else
                 {
-                    Console.WriteLine("  -> [Unknown] 이미 Unknown 폴더에 있습니다.\n");
+                    Console.WriteLine("  -> [Unknown] 이미 Unknown 폴더에 알맞은 이름으로 저장되어 있습니다.\n");
                 }
             }
             catch (Exception ex)
