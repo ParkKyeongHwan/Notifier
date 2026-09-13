@@ -25,6 +25,41 @@ namespace Notifier
             LoadConfiguration(configFileName);
         }
 
+        // 이미지 파일을 읽어오는 함수
+        public string ReadImageFile(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                Console.WriteLine($"[에러] 파일을 찾을 수 없습니다: {filePath}");
+                return string.Empty;
+            }
+
+            try
+            {
+                using (Bitmap rawImage = new Bitmap(filePath))
+                {
+                    // 플랜 A 시도: 픽셀을 또렷하게 유지하는 방식 (NearestNeighbor)
+                    string resultA = ProcessOcrWithStrategy(rawImage, System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor);
+
+                    if (!string.IsNullOrEmpty(resultA) && resultA.Length > 5)
+                    {
+                        return resultA;
+                    }
+
+                    // 플랜 B 시도: 플랜 A가 실패했거나 글자가 다 깨졌다면, 예전 방식인 부드러운 확대(Bicubic)로 재시도
+                    Console.WriteLine($"[{Path.GetFileName(filePath)}] OCR 플랜 A 실패. 플랜 B(Bicubic)로 재시도합니다.");
+                    string resultB = ProcessOcrWithStrategy(rawImage, System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic);
+
+                    return resultB;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[이미지 읽기 에러] {filePath} - {ex.Message}");
+                return string.Empty;
+            }
+        }
+
         // 1. 화면 캡처 함수
         public Bitmap CaptureCoordinateArea(int startX, int startY, int width, int height)
         {
