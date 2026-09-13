@@ -87,6 +87,161 @@
             { "상위", "알 수 없는 습격전" }
         };
 
+        // 미션별 인원수 매핑 (인원수를 기준으로 후보를 필터링하기 위함)
+        private static readonly Dictionary<string, int> MissionPeopleCount = new Dictionary<string, int>
+        {
+            // 3명
+            { "한계농지 논밭 습격전 (상위 3명)", 3 },
+            { "산책로 광장 습격전 (상위 3명)", 3 },
+            { "깊은산길 개미군락 습격전 (상위 3명)", 3 },
+
+            // 5명
+            { "농업진흥구역 방벽 습격전 (상위 5명)", 5 },
+            { "복합지구 상부공장 습격전 (상위 5명)", 5 },
+            { "계곡길 개미협곡 습격전 (상위 5명)", 5 },
+
+            // 10명
+            { "복합지구 중앙 습격전 (상위 10명)", 10 },
+            { "체험농장 상부 습격전 (상위 10명)", 10 },
+            { "오솔길 중앙 습격전 (상위 10명)", 10 },
+
+            // 15명
+            { "농업보호구역 농장 폐허 습격전 (상위 15명)", 15 },
+            { "산책로 굽은길 습격전 (상위 15명)", 15 },
+            { "서쪽산길 폐허 습격전 (상위 15명)", 15 },
+
+            // 20명
+            { "팔당댐 공원 습격전 (상위 20명)", 20 },
+            { "외국기업지구 하부 습격전 (상위 20명)", 20 },
+            { "중공업지구 상부공장 습격전 (상위 20명)", 20 },
+
+            // 30명
+            { "카페촌 전면도로 습격전 (상위 30명)", 30 },
+            { "농업진흥구역 경작지 습격전 (상위 30명)", 30 },
+            { "체험농장 하부 습격전 (상위 30명)", 30 },
+
+            // 50명
+            { "과수원 중앙 습격전 (상위 50명)", 50 },
+            { "산책로 중앙 습격전 (상위 50명)", 50 },
+            { "산책로 B (상위 50명)", 50 },
+            { "깊은산길 중턱 습격전 (상위 50명)", 50 },
+
+            // 100명
+            { "경공업지구 산란지 습격전 (상위 100명)", 100 },
+            { "계곡길 개미굴 습격전 (상위 100명)", 100 },
+            { "운길산 초입 공터 습격전 (상위 100명)", 100 },
+
+            // 150명
+            { "상업지구 상가단지 습격전 (상위 150명)", 150 },
+            { "산책로 두물경 습격전 (상위 150명)", 150 },
+            { "서쪽산길 아라크니아 습격전 (상위 150명)", 150 }
+        };
+
+        public static (string Name, string Category) ExtractMissionNameEnhanced(string rawOcrText)
+        {
+            string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
+
+            // 1. 숫자(인원수) 추출 시도
+            int extractedCount = -1;
+            // 정규식을 사용하거나 단순히 문자열 내 포함 여부 확인
+            // 흔한 인원수: 3, 5, 10, 15, 20, 30, 50, 100, 150
+            int[] validCounts = { 150, 100, 50, 30, 20, 15, 10, 5, 3 }; // 큰 수부터 확인 (예: 150이 50에 매칭되지 않게)
+
+            // 숫자만 추출하기 위한 정규식
+            System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(cleanText, @"\d+");
+            if (match.Success)
+            {
+                if (int.TryParse(match.Value, out int num))
+                {
+                    if (validCounts.Contains(num))
+                    {
+                        extractedCount = num;
+                        Console.WriteLine($"[인원수 감지] {extractedCount}명");
+                    }
+                }
+            }
+
+            // 만약 정규식으로 정확히 안 찾아진다면, 숫자 문자열이 포함되어 있는지 확인
+            if (extractedCount == -1)
+            {
+                foreach (int count in validCounts)
+                {
+                    if (cleanText.Contains(count.ToString()))
+                    {
+                        // 150 안에 50이 포함되어 있으므로 추가 확인 필요
+                        if (count == 50 && cleanText.Contains("150")) continue;
+                        if (count == 10 && cleanText.Contains("100")) continue;
+                        if (count == 15 && cleanText.Contains("150")) continue;
+
+                        extractedCount = count;
+                        Console.WriteLine($"[인원수 감지 (텍스트포함)] {extractedCount}명");
+                        break;
+                    }
+                }
+            }
+
+            // 인원수가 감지되었다면 해당 인원수에 맞는 미션들만 필터링해서 검사
+            if (extractedCount != -1)
+            {
+                var candidateMissions = MissionPeopleCount.Where(kvp => kvp.Value == extractedCount).Select(kvp => kvp.Key).ToList();
+
+                string bestMatchName = string.Empty;
+                int bestErrorCount = int.MaxValue;
+
+                // 필터링된 후보들 중 키워드와 매칭
+                foreach (var candidateName in candidateMissions)
+                {
+                    // Dictionary에서 이 전체 이름을 가리키는 키워드들을 찾음
+                    var keywords = MissionDictionary.Where(kvp => kvp.Value == candidateName).Select(kvp => kvp.Key).ToList();
+
+                    foreach (string targetKeyword in keywords)
+                    {
+                        // 텍스트가 매우 깨진 상황을 가정하여, 오타 허용치를 대폭 늘림
+                        int allowedErrors = targetKeyword.Length / 2; // 절반까지 오타 허용!
+
+                        if (cleanText.Length < targetKeyword.Length)
+                        {
+                            // 글자가 잘린 경우: 잘린 길이만큼만 비교
+                            int errorCount = ComputeLevenshteinDistance(cleanText, targetKeyword.Substring(0, cleanText.Length));
+                            if (errorCount <= allowedErrors && errorCount < bestErrorCount)
+                            {
+                                bestErrorCount = errorCount;
+                                bestMatchName = candidateName;
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i <= cleanText.Length - targetKeyword.Length; i++)
+                            {
+                                string window = cleanText.Substring(i, targetKeyword.Length);
+                                int errorCount = ComputeLevenshteinDistance(window, targetKeyword);
+
+                                if (errorCount <= allowedErrors && errorCount < bestErrorCount)
+                                {
+                                    bestErrorCount = errorCount;
+                                    bestMatchName = candidateName;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(bestMatchName))
+                {
+                    return (bestMatchName, "Success");
+                }
+                else
+                {
+                    // 인원수는 찾았는데 글자를 도저히 매칭할 수 없는 경우, 인원수만이라도 반환할지 선택
+                    // 일단은 알 수 없는 습격전(상위 N명)으로 반환
+                    return ($"알 수 없는 습격전 (상위 {extractedCount}명)", "Unknown");
+                }
+            }
+
+            // 인원수를 못 찾았거나 후보 매칭에 실패하면 기존 로직 수행
+            return ExtractMissionName(rawOcrText);
+        }
+
         public static (string Name, string Category) ExtractMissionName(string rawOcrText)
         {
             // 1. OCR의 불필요한 공백과 줄바꿈을 모두 제거

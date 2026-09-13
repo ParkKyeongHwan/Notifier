@@ -35,11 +35,20 @@ var modeSelection = AnsiConsole.Prompt(
         .PageSize(10)
         .AddChoices(new[] {
             "1. 지정 시간 동작 (19:00 ~ 00:59)",
-            "2. 24시간 동작"
+            "2. 24시간 동작",
+            "3. FAIL 폴더 이미지 재분석"
         }));
 
 bool run24Hours = modeSelection == "2. 24시간 동작";
 AnsiConsole.MarkupLine($"선택된 모드: [green]{modeSelection}[/]");
+
+if (modeSelection == "3. FAIL 폴더 이미지 재분석")
+{
+    RunFailFolderReanalysis(recognizer);
+    Console.WriteLine("재분석이 완료되었습니다. 프로그램을 종료하려면 아무 키나 누르세요.");
+    Console.ReadKey();
+    return;
+}
 
 while (true)
 {
@@ -177,6 +186,82 @@ while (true)
 
     // 항상 10초 대기
     await Task.Delay(10000);
+}
+
+
+void RunFailFolderReanalysis(Recognizer rec)
+{
+    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+    string failFolder = Path.Combine(desktopPath, "FAIL");
+    string tempFolder = Path.Combine(desktopPath, "Temp");
+
+    if (!Directory.Exists(failFolder))
+    {
+        Console.WriteLine($"[에러] 바탕화면에 FAIL 폴더를 찾을 수 없습니다: {failFolder}");
+        return;
+    }
+
+    if (!Directory.Exists(tempFolder))
+    {
+        Directory.CreateDirectory(tempFolder);
+    }
+
+    var files = Directory.GetFiles(failFolder, "*.png");
+    if (files.Length == 0)
+    {
+        Console.WriteLine("FAIL 폴더에 분석할 이미지(.png)가 없습니다.");
+        return;
+    }
+
+    Console.WriteLine($"총 {files.Length}개의 이미지를 재분석합니다...\n");
+
+    int successCount = 0;
+    foreach (var file in files)
+    {
+        Console.WriteLine($"[분석 중] {Path.GetFileName(file)}");
+        string rawText = rec.ReadImageFile(file);
+
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            Console.WriteLine("  -> 텍스트를 읽을 수 없습니다.\n");
+            continue;
+        }
+
+        Console.WriteLine($"  -> 추출 텍스트: {rawText}");
+        var result = OcrCorrector.ExtractMissionNameEnhanced(rawText);
+        Console.WriteLine($"  -> 매칭 결과: {result.Name} (Category: {result.Category})");
+
+        if (result.Category == "Success")
+        {
+            string cleanName = result.Name.Replace("\r", "").Replace("\n", " ");
+            if (cleanName.Length > 50)
+            {
+                cleanName = cleanName.Substring(0, 50);
+            }
+            string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
+
+            // 기존 파일명에서 타임스탬프 등 앞부분을 살리고 싶다면 유지하되, 여기서는 단순화하여 새 이름으로 저장
+            string newFileName = $"{Path.GetFileNameWithoutExtension(file)}_{safeFileName}.png";
+            string targetPath = Path.Combine(tempFolder, newFileName);
+
+            try
+            {
+                File.Move(file, targetPath);
+                Console.WriteLine($"  -> [성공] Temp 폴더로 이동됨: {newFileName}\n");
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  -> [에러] 파일 이동 실패: {ex.Message}\n");
+            }
+        }
+        else
+        {
+            Console.WriteLine("  -> [실패] 매칭되지 않아 FAIL 폴더에 남겨둡니다.\n");
+        }
+    }
+
+    Console.WriteLine($"\n재분석 완료: 총 {files.Length}개 중 {successCount}개 성공.");
 }
 
 
