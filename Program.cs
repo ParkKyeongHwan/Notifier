@@ -118,6 +118,7 @@ while (true)
         var extractionResult = OcrCorrector.ExtractMissionName(rawText);
         string extractedText = extractionResult.Name;
         string category = extractionResult.Category;
+        // Reason is ignored in real-time capture
 
         Console.WriteLine(extractedText);
 
@@ -200,6 +201,51 @@ void RunFailFolderReanalysis(Recognizer rec)
     if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
     if (!Directory.Exists(unknownFolder)) Directory.CreateDirectory(unknownFolder);
 
+    string logFilePath = Path.Combine(desktopPath, $"Reanalysis_Log_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+    try
+    {
+        // CSV 헤더 작성 (BOM 추가하여 엑셀 한글 깨짐 방지)
+        File.WriteAllText(logFilePath, "\uFEFFFile Name,Raw Text,Extracted Name,Category,Reason\n", System.Text.Encoding.UTF8);
+        Console.WriteLine($"[알림] 로그 파일이 생성되었습니다: {logFilePath}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[에러] 로그 파일을 생성할 수 없습니다: {ex.Message}");
+    }
+
+    // 0. Unknown 폴더 검사: "알 수 없는 습격전_"과 실제 미션 이름이 동시에 포함된 오분류 파일 복구
+    if (Directory.Exists(unknownFolder))
+    {
+        Console.WriteLine("Unknown 폴더에서 오분류된 '알 수 없는 습격전' 이미지를 찾아 Success 폴더로 이동합니다...");
+        var unknownFiles = Directory.GetFiles(unknownFolder, "*.png");
+        int movedToSuccess = 0;
+
+        if (!Directory.Exists(successFolder)) Directory.CreateDirectory(successFolder);
+
+        foreach (var uFile in unknownFiles)
+        {
+            string fileName = Path.GetFileName(uFile);
+            // "알 수 없는 습격전_" 과 또 다른 "습격전" 이름이 포함된 경우
+            if (fileName.Contains("알 수 없는 습격전_") && fileName.LastIndexOf("습격전") > fileName.IndexOf("알 수 없는 습격전_"))
+            {
+                string newFileName = fileName.Replace("알 수 없는 습격전_", "");
+                string targetPath = Path.Combine(successFolder, newFileName);
+                try
+                {
+                    if (File.Exists(targetPath)) File.Delete(targetPath);
+                    File.Move(uFile, targetPath);
+                    movedToSuccess++;
+                    Console.WriteLine($"  -> 복구됨: {fileName} -> {newFileName}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  -> 복구 실패 ({fileName}): {ex.Message}");
+                }
+            }
+        }
+        Console.WriteLine($"복구 완료: 총 {movedToSuccess}개의 파일을 Success 폴더로 이동했습니다.\n");
+    }
+
     // 1. Success 폴더 검사: "알 수 없는 습격전"이 포함된 파일들을 Unknown 폴더로 이동
     if (Directory.Exists(successFolder))
     {
@@ -253,7 +299,8 @@ void RunFailFolderReanalysis(Recognizer rec)
     int successCount = 0;
     foreach (var file in filesToAnalyze)
     {
-        Console.WriteLine($"[분석 중] {Path.GetFileName(file)}");
+        string fileNameOnly = Path.GetFileName(file);
+        Console.WriteLine($"[분석 중] {fileNameOnly}");
         string rawText = rec.ReadImageFile(file);
 
         if (string.IsNullOrWhiteSpace(rawText))
@@ -263,8 +310,23 @@ void RunFailFolderReanalysis(Recognizer rec)
         }
 
         Console.WriteLine($"  -> 추출 텍스트: {rawText}");
+        // 로깅을 위해 원본 텍스트의 특수문자 제거
+        string csvSafeRawText = string.IsNullOrWhiteSpace(rawText) ? "EMPTY" : rawText.Replace("\"", "\"\"").Replace("\n", " ").Replace("\r", "");
+
         var result = OcrCorrector.ExtractMissionNameEnhanced(rawText);
-        Console.WriteLine($"  -> 매칭 결과: {result.Name} (Category: {result.Category})");
+        Console.WriteLine($"  -> 매칭 결과: {result.Name} (Category: {result.Category}, Reason: {result.Reason})");
+
+        string csvSafeName = string.IsNullOrWhiteSpace(result.Name) ? "EMPTY" : result.Name.Replace("\"", "\"\"");
+        string csvSafeReason = string.IsNullOrWhiteSpace(result.Reason) ? "NONE" : result.Reason.Replace("\"", "\"\"");
+
+        try
+        {
+            File.AppendAllText(logFilePath, $"\"{fileNameOnly}\",\"{csvSafeRawText}\",\"{csvSafeName}\",\"{result.Category}\",\"{csvSafeReason}\"\n", System.Text.Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  -> [에러] 로그 기록 실패: {ex.Message}");
+        }
 
         string cleanName = result.Name.Replace("\r", "").Replace("\n", " ");
         if (cleanName.Length > 50)

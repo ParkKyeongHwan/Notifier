@@ -137,7 +137,7 @@
             { "서쪽산길 아라크니아 습격전 (상위 150명)", 150 }
         };
 
-        public static (string Name, string Category) ExtractMissionNameEnhanced(string rawOcrText)
+        public static (string Name, string Category, string Reason) ExtractMissionNameEnhanced(string rawOcrText)
         {
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
 
@@ -228,13 +228,13 @@
 
                 if (!string.IsNullOrEmpty(bestMatchName))
                 {
-                    return (bestMatchName, "Success");
+                    return (bestMatchName, "Success", $"인원수({extractedCount}명) 기반 매칭 성공");
                 }
                 else
                 {
                     // 인원수는 찾았는데 글자를 도저히 매칭할 수 없는 경우, 인원수만이라도 반환할지 선택
                     // 일단은 알 수 없는 습격전(상위 N명)으로 반환
-                    return ($"알 수 없는 습격전 (상위 {extractedCount}명)", "Unknown");
+                    return ($"알 수 없는 습격전 (상위 {extractedCount}명)", "Unknown", $"인원수({extractedCount}명)만 감지됨. 이름 매칭 실패");
                 }
             }
 
@@ -242,7 +242,7 @@
             return ExtractMissionName(rawOcrText);
         }
 
-        public static (string Name, string Category) ExtractMissionName(string rawOcrText)
+        public static (string Name, string Category, string Reason) ExtractMissionName(string rawOcrText)
         {
             // 1. OCR의 불필요한 공백과 줄바꿈을 모두 제거
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
@@ -280,7 +280,7 @@
             if (!string.IsNullOrEmpty(bestAssaultMatch))
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 어설트 감지 ('{bestAssaultMatch}').");
-                return ($"어설트 ({bestAssaultMatch})", "Assault");
+                return ($"어설트 ({bestAssaultMatch})", "Assault", "예외 키워드(어설트) 감지");
             }
 
             string bestMatchName = string.Empty;
@@ -314,7 +314,7 @@
                         // 완벽히 일치(오타 0)하면 무조건 정답이므로 즉시 반환!
                         if (errorCount == 0)
                         {
-                            return (fullName, "Success");
+                            return (fullName, "Success", "완벽 매칭");
                         }
 
                         if (errorCount < bestErrorCount)
@@ -331,9 +331,9 @@
             {
                 if (bestMatchName == "알 수 없는 습격전")
                 {
-                    return (bestMatchName, "Unknown");
+                    return (bestMatchName, "Unknown", $"오타 허용 범위({bestErrorCount}개) 내 알 수 없는 습격전 매칭");
                 }
-                return (bestMatchName, "Success");
+                return (bestMatchName, "Success", $"오타 허용 범위({bestErrorCount}개) 내 매칭");
             }
 
             // 구체적인 미션을 못 찾았을 경우 "습격전" 이라는 단어가 있는지 확인
@@ -346,7 +346,7 @@
                     // "습격전"(3글자)이므로 오타 1개까지는 허용하여 융통성 있게 검사
                     if (ComputeLevenshteinDistance(window, fallbackKeyword) <= 1)
                     {
-                        return ("알 수 없는 습격전", "Unknown");
+                        return ("알 수 없는 습격전", "Unknown", "'습격' 키워드 단독 감지");
                     }
                 }
             }
@@ -354,10 +354,10 @@
             // 최후의 수단: OCR이 심하게 깨져서 "습" 또는 "격" 단 한 글자만 인식된 경우
             if (cleanText.Contains("습") || cleanText.Contains("격"))
             {
-                return ("알 수 없는 습격전", "Unknown");
+                return ("알 수 없는 습격전", "Unknown", "'습' 또는 '격' 1글자 감지");
             }
 
-            return ("미발견", "None");
+            return ("미발견", "None", "매칭되는 단어 없음");
         }
 
         private static int ComputeLevenshteinDistance(string s, string t)
