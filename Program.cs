@@ -36,13 +36,13 @@ var modeSelection = AnsiConsole.Prompt(
         .AddChoices(new[] {
             "1. 지정 시간 동작 (19:00 ~ 00:59)",
             "2. 24시간 동작",
-            "3. FAIL 폴더 이미지 재분석"
+            "3. FAIL / Unknown 폴더 이미지 재분석 및 정리"
         }));
 
 bool run24Hours = modeSelection == "2. 24시간 동작";
 AnsiConsole.MarkupLine($"선택된 모드: [green]{modeSelection}[/]");
 
-if (modeSelection == "3. FAIL 폴더 이미지 재분석")
+if (modeSelection == "3. FAIL / Unknown 폴더 이미지 재분석 및 정리")
 {
     RunFailFolderReanalysis(recognizer);
     Console.WriteLine("재분석이 완료되었습니다. 프로그램을 종료하려면 아무 키나 누르세요.");
@@ -193,30 +193,65 @@ void RunFailFolderReanalysis(Recognizer rec)
 {
     string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
     string failFolder = Path.Combine(desktopPath, "FAIL");
+    string unknownFolder = Path.Combine(desktopPath, "Unknown");
     string tempFolder = Path.Combine(desktopPath, "Temp");
+    string successFolder = Path.Combine(desktopPath, "Success");
 
-    if (!Directory.Exists(failFolder))
+    if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
+    if (!Directory.Exists(unknownFolder)) Directory.CreateDirectory(unknownFolder);
+
+    // 1. Success 폴더 검사: "알 수 없는 습격전"이 포함된 파일들을 Unknown 폴더로 이동
+    if (Directory.Exists(successFolder))
     {
-        Console.WriteLine($"[에러] 바탕화면에 FAIL 폴더를 찾을 수 없습니다: {failFolder}");
+        Console.WriteLine("Success 폴더에서 '알 수 없는 습격전' 이미지를 찾아 Unknown 폴더로 이동합니다...");
+        var successFiles = Directory.GetFiles(successFolder, "*.png");
+        int movedToUnknown = 0;
+        foreach (var sFile in successFiles)
+        {
+            string fileName = Path.GetFileName(sFile);
+            if (fileName.Contains("알 수 없는 습격전") || fileName.Contains("알수없는"))
+            {
+                string targetPath = Path.Combine(unknownFolder, fileName);
+                try
+                {
+                    // 만약 대상 경로에 이미 파일이 있다면 덮어쓰거나 이름 변경 (여기서는 단순히 덮어씀)
+                    if (File.Exists(targetPath)) File.Delete(targetPath);
+                    File.Move(sFile, targetPath);
+                    movedToUnknown++;
+                    Console.WriteLine($"  -> 이동됨: {fileName}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  -> 이동 실패 ({fileName}): {ex.Message}");
+                }
+            }
+        }
+        Console.WriteLine($"정리 완료: 총 {movedToUnknown}개의 파일을 Unknown 폴더로 이동했습니다.\n");
+    }
+
+    // 2. FAIL 및 Unknown 폴더 합쳐서 재분석 준비
+    List<string> filesToAnalyze = new List<string>();
+
+    if (Directory.Exists(failFolder))
+    {
+        filesToAnalyze.AddRange(Directory.GetFiles(failFolder, "*.png"));
+    }
+
+    if (Directory.Exists(unknownFolder))
+    {
+        filesToAnalyze.AddRange(Directory.GetFiles(unknownFolder, "*.png"));
+    }
+
+    if (filesToAnalyze.Count == 0)
+    {
+        Console.WriteLine("FAIL 또는 Unknown 폴더에 분석할 이미지(.png)가 없습니다.");
         return;
     }
 
-    if (!Directory.Exists(tempFolder))
-    {
-        Directory.CreateDirectory(tempFolder);
-    }
-
-    var files = Directory.GetFiles(failFolder, "*.png");
-    if (files.Length == 0)
-    {
-        Console.WriteLine("FAIL 폴더에 분석할 이미지(.png)가 없습니다.");
-        return;
-    }
-
-    Console.WriteLine($"총 {files.Length}개의 이미지를 재분석합니다...\n");
+    Console.WriteLine($"총 {filesToAnalyze.Count}개의 이미지를 재분석합니다...\n");
 
     int successCount = 0;
-    foreach (var file in files)
+    foreach (var file in filesToAnalyze)
     {
         Console.WriteLine($"[분석 중] {Path.GetFileName(file)}");
         string rawText = rec.ReadImageFile(file);
@@ -231,21 +266,21 @@ void RunFailFolderReanalysis(Recognizer rec)
         var result = OcrCorrector.ExtractMissionNameEnhanced(rawText);
         Console.WriteLine($"  -> 매칭 결과: {result.Name} (Category: {result.Category})");
 
-        if (result.Category == "Success")
+        string cleanName = result.Name.Replace("\r", "").Replace("\n", " ");
+        if (cleanName.Length > 50)
         {
-            string cleanName = result.Name.Replace("\r", "").Replace("\n", " ");
-            if (cleanName.Length > 50)
-            {
-                cleanName = cleanName.Substring(0, 50);
-            }
-            string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
+            cleanName = cleanName.Substring(0, 50);
+        }
+        string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
 
-            // 기존 파일명에서 타임스탬프 등 앞부분을 살리고 싶다면 유지하되, 여기서는 단순화하여 새 이름으로 저장
-            string newFileName = $"{Path.GetFileNameWithoutExtension(file)}_{safeFileName}.png";
+        string newFileName = $"{Path.GetFileNameWithoutExtension(file)}_{safeFileName}.png";
+
+        if (result.Category == "Success" && !result.Name.Contains("알 수 없는") && !result.Name.Contains("알수없는"))
+        {
             string targetPath = Path.Combine(tempFolder, newFileName);
-
             try
             {
+                if (File.Exists(targetPath)) File.Delete(targetPath);
                 File.Move(file, targetPath);
                 Console.WriteLine($"  -> [성공] Temp 폴더로 이동됨: {newFileName}\n");
                 successCount++;
@@ -255,13 +290,34 @@ void RunFailFolderReanalysis(Recognizer rec)
                 Console.WriteLine($"  -> [에러] 파일 이동 실패: {ex.Message}\n");
             }
         }
+        else if (result.Category == "Unknown" || result.Name.Contains("알 수 없는") || result.Name.Contains("알수없는"))
+        {
+            string targetPath = Path.Combine(unknownFolder, newFileName);
+            try
+            {
+                if (file != targetPath)
+                {
+                    if (File.Exists(targetPath)) File.Delete(targetPath);
+                    File.Move(file, targetPath);
+                    Console.WriteLine($"  -> [Unknown] Unknown 폴더로 이동됨: {newFileName}\n");
+                }
+                else
+                {
+                    Console.WriteLine("  -> [Unknown] 이미 Unknown 폴더에 있습니다.\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  -> [에러] 파일 이동 실패: {ex.Message}\n");
+            }
+        }
         else
         {
-            Console.WriteLine("  -> [실패] 매칭되지 않아 FAIL 폴더에 남겨둡니다.\n");
+            Console.WriteLine("  -> [실패] 매칭되지 않아 현재 폴더에 남겨둡니다.\n");
         }
     }
 
-    Console.WriteLine($"\n재분석 완료: 총 {files.Length}개 중 {successCount}개 성공.");
+    Console.WriteLine($"\n재분석 완료: 총 {filesToAnalyze.Count}개 중 {successCount}개 성공.");
 }
 
 
