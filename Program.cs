@@ -201,6 +201,12 @@ while (true)
 
 void RunManualClassification(Recognizer rec)
 {
+try {
+    System.Windows.Forms.Application.SetHighDpiMode(System.Windows.Forms.HighDpiMode.SystemAware);
+    System.Windows.Forms.Application.EnableVisualStyles();
+    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+} catch {}
+
     string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
     string failFolder = Path.Combine(desktopPath, "FAIL");
     string unknownFolder = Path.Combine(desktopPath, "Unknown");
