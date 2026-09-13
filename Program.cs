@@ -304,6 +304,7 @@ void RunFailFolderReanalysis(Recognizer rec)
     Console.WriteLine($"총 {filesToAnalyze.Count}개의 이미지를 재분석합니다...\n");
 
     int successCount = 0;
+    int deletedCount = 0;
     foreach (var file in filesToAnalyze)
     {
         string fileNameOnly = Path.GetFileName(file);
@@ -396,13 +397,26 @@ void RunFailFolderReanalysis(Recognizer rec)
                 Console.WriteLine($"  -> [에러] 파일 이동 실패: {ex.Message}\n");
             }
         }
+        else if (result.Category == "None")
+        {
+            try
+            {
+                File.Delete(file);
+                deletedCount++;
+                Console.WriteLine($"  -> [삭제] 가비지 데이터(None)로 판별되어 삭제되었습니다.\n");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  -> [에러] 파일 삭제 실패: {ex.Message}\n");
+            }
+        }
         else
         {
             Console.WriteLine("  -> [실패] 매칭되지 않아 현재 폴더에 남겨둡니다.\n");
         }
     }
 
-    Console.WriteLine($"\n재분석 완료: 총 {filesToAnalyze.Count}개 중 {successCount}개 성공.");
+    Console.WriteLine($"\n재분석 완료: 총 {filesToAnalyze.Count}개 중 {successCount}개 성공, {deletedCount}개 삭제.");
 }
 
 
