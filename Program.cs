@@ -249,54 +249,163 @@ void RunManualClassification(Recognizer rec)
 
         AnsiConsole.MarkupLine($"[cyan]추출된 텍스트:[/] {ocrKey}");
 
-        // 이미지 열기 (OS 기본 뷰어)
-        try
+        using (var form = new System.Windows.Forms.Form())
         {
-            Process.Start(new ProcessStartInfo { FileName = file, UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"이미지를 열 수 없습니다: {ex.Message}");
-        }
+            form.Text = $"수동 분류 - {fileNameOnly}";
+            form.Size = new System.Drawing.Size(1200, 800);
+            form.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            form.KeyPreview = true;
 
-        // 선택 메뉴 출력
-        Console.WriteLine("\n[정답을 선택하세요] - 주의: 파일 뷰어가 열려있으면 이동/삭제가 실패할 수 있으니 진행 전에 이미지를 닫아주세요.");
-        for (int i = 0; i < answerList.Count; i++)
-        {
-            Console.WriteLine($"{i + 1,2}: {answerList[i]}");
-        }
-        Console.WriteLine("\n[D/d]: 삭제  |  [Enter]: 스킵");
-        Console.Write("선택: ");
-        string input = Console.ReadLine()?.Trim();
+            var splitContainer = new System.Windows.Forms.SplitContainer();
+            splitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
+            splitContainer.SplitterDistance = 600;
+            form.Controls.Add(splitContainer);
 
-        if (string.IsNullOrEmpty(input))
-        {
-            Console.WriteLine("스킵합니다.");
-            continue;
-        }
+            var pictureBox = new System.Windows.Forms.PictureBox();
+            pictureBox.Dock = System.Windows.Forms.DockStyle.Fill;
+            pictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
 
-        if (input.Equals("D", StringComparison.OrdinalIgnoreCase))
-        {
-            try
+            // Use FileStream and a deep copy (Bitmap) so the file isn't locked, allowing us to delete/move it later
+            using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
             {
-                File.Delete(file);
-                Console.WriteLine("파일이 삭제되었습니다.");
+                using (var img = Image.FromStream(fs))
+                {
+                    pictureBox.Image = new Bitmap(img);
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"삭제 실패: {ex.Message}");
-            }
-            continue;
-        }
+            splitContainer.Panel1.Controls.Add(pictureBox);
 
-        if (int.TryParse(input, out int choice) && choice >= 1 && choice <= answerList.Count)
-        {
-            string correctAnswer = answerList[choice - 1];
+            var panelRight = new System.Windows.Forms.Panel();
+            panelRight.Dock = System.Windows.Forms.DockStyle.Fill;
+            panelRight.Padding = new System.Windows.Forms.Padding(10);
+            splitContainer.Panel2.Controls.Add(panelRight);
+
+            var label = new System.Windows.Forms.Label();
+            label.Text = $"추출된 텍스트:\n{ocrKey}\n\n정답을 더블클릭하거나 아래 버튼을 누르세요.\n[D] 삭제 | [Esc/Enter] 스킵";
+            label.Dock = System.Windows.Forms.DockStyle.Top;
+            label.Height = 80;
+            label.Font = new Font("Malgun Gothic", 10, FontStyle.Bold);
+            panelRight.Controls.Add(label);
+
+            var listBox = new System.Windows.Forms.ListBox();
+            listBox.Dock = System.Windows.Forms.DockStyle.Fill;
+            listBox.Font = new Font("Malgun Gothic", 10);
+            for (int i = 0; i < answerList.Count; i++)
+            {
+                listBox.Items.Add($"{i + 1}. {answerList[i]}");
+            }
+            panelRight.Controls.Add(listBox);
+            listBox.BringToFront();
+
+            var buttonPanel = new System.Windows.Forms.Panel();
+            buttonPanel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            buttonPanel.Height = 50;
+            panelRight.Controls.Add(buttonPanel);
+
+            var btnDelete = new System.Windows.Forms.Button { Text = "삭제 (D)", Dock = System.Windows.Forms.DockStyle.Left, Width = 150 };
+            var btnSkip = new System.Windows.Forms.Button { Text = "스킵 (Enter/Esc)", Dock = System.Windows.Forms.DockStyle.Right, Width = 150 };
+            buttonPanel.Controls.Add(btnDelete);
+            buttonPanel.Controls.Add(btnSkip);
+
+            string selectedAnswer = null;
+            bool isDeleted = false;
+            bool isSkipped = false;
+
+            void HandleAnswer(string answer)
+            {
+                selectedAnswer = answer;
+                form.Close();
+            }
+
+            listBox.DoubleClick += (s, e) =>
+            {
+                if (listBox.SelectedIndex >= 0)
+                {
+                    HandleAnswer(answerList[listBox.SelectedIndex]);
+                }
+            };
+
+            btnDelete.Click += (s, e) => { isDeleted = true; form.Close(); };
+            btnSkip.Click += (s, e) => { isSkipped = true; form.Close(); };
+
+            form.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == System.Windows.Forms.Keys.D)
+                {
+                    isDeleted = true;
+                    form.Close();
+                }
+                else if (e.KeyCode == System.Windows.Forms.Keys.Escape)
+                {
+                    isSkipped = true;
+                    form.Close();
+                }
+                else if (e.KeyCode == System.Windows.Forms.Keys.Enter)
+                {
+                    if (listBox.SelectedIndex >= 0)
+                    {
+                        HandleAnswer(answerList[listBox.SelectedIndex]);
+                    }
+                    else
+                    {
+                        isSkipped = true;
+                        form.Close();
+                    }
+                }
+                else if (e.KeyCode >= System.Windows.Forms.Keys.D1 && e.KeyCode <= System.Windows.Forms.Keys.D9)
+                {
+                    int index = e.KeyCode - System.Windows.Forms.Keys.D1;
+                    if (index < answerList.Count)
+                    {
+                        HandleAnswer(answerList[index]);
+                    }
+                }
+                else if (e.KeyCode >= System.Windows.Forms.Keys.NumPad1 && e.KeyCode <= System.Windows.Forms.Keys.NumPad9)
+                {
+                    int index = e.KeyCode - System.Windows.Forms.Keys.NumPad1;
+                    if (index < answerList.Count)
+                    {
+                        HandleAnswer(answerList[index]);
+                    }
+                }
+            };
+
+            form.ShowDialog();
+
+            // Cleanup Image resources before deleting/moving file
+            if (pictureBox.Image != null)
+            {
+                var img = pictureBox.Image;
+                pictureBox.Image = null;
+                img.Dispose();
+            }
+
+            // Handle results after form closes
+            if (isDeleted)
+            {
+                try
+                {
+                    File.Delete(file);
+                    Console.WriteLine("파일이 삭제되었습니다.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"삭제 실패: {ex.Message}");
+                }
+                continue;
+            }
+
+            if (isSkipped || selectedAnswer == null)
+            {
+                Console.WriteLine("스킵합니다.");
+                continue;
+            }
+
+            string correctAnswer = selectedAnswer;
 
             // 백데이터 저장
             try
             {
-                // 쉼표 대신 탭(Tab) 문자를 구분자로 사용하여 OCR 텍스트 내 쉼표에 의해 파싱이 깨지는 것을 방지
                 string csvLine = $"{ocrKey}\t{correctAnswer}\n";
                 File.AppendAllText(dictionaryPath, csvLine, System.Text.Encoding.UTF8);
             }
@@ -309,7 +418,6 @@ void RunManualClassification(Recognizer rec)
             string cleanName = correctAnswer.Replace("\r", "").Replace("\n", " ");
             string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
 
-            // 기존 타임스탬프 추출 시도
             string oldFileName = Path.GetFileNameWithoutExtension(file);
             string timestamp = "";
             System.Text.RegularExpressions.Match tsMatch = System.Text.RegularExpressions.Regex.Match(oldFileName, @"^(\d{8}_\d{6})");
@@ -335,10 +443,6 @@ void RunManualClassification(Recognizer rec)
             {
                 Console.WriteLine($"파일 이동 실패: {ex.Message}");
             }
-        }
-        else
-        {
-            Console.WriteLine("잘못된 입력입니다. 스킵합니다.");
         }
     }
 }
