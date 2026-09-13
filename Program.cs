@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Text.RegularExpressions;
 using Spectre.Console;
+using System.Diagnostics;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
@@ -36,7 +37,8 @@ var modeSelection = AnsiConsole.Prompt(
         .AddChoices(new[] {
             "1. 지정 시간 동작 (19:00 ~ 00:59)",
             "2. 24시간 동작",
-            "3. FAIL / Unknown 폴더 이미지 재분석 및 정리"
+            "3. FAIL / Unknown 폴더 이미지 재분석 및 정리",
+            "4. 수동 분류 및 분석 (백데이터 생성)"
         }));
 
 bool run24Hours = modeSelection == "2. 24시간 동작";
@@ -46,6 +48,13 @@ if (modeSelection == "3. FAIL / Unknown 폴더 이미지 재분석 및 정리")
 {
     RunFailFolderReanalysis(recognizer);
     Console.WriteLine("재분석이 완료되었습니다. 프로그램을 종료하려면 아무 키나 누르세요.");
+    Console.ReadKey();
+    return;
+}
+else if (modeSelection == "4. 수동 분류 및 분석 (백데이터 생성)")
+{
+    RunManualClassification(recognizer);
+    Console.WriteLine("수동 분류가 완료되었습니다. 프로그램을 종료하려면 아무 키나 누르세요.");
     Console.ReadKey();
     return;
 }
@@ -187,6 +196,151 @@ while (true)
 
     // 항상 10초 대기
     await Task.Delay(10000);
+}
+
+
+void RunManualClassification(Recognizer rec)
+{
+    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+    string failFolder = Path.Combine(desktopPath, "FAIL");
+    string unknownFolder = Path.Combine(desktopPath, "Unknown");
+    string successFolder = Path.Combine(desktopPath, "Success");
+    string dictionaryPath = Path.Combine(desktopPath, "user_dictionary.csv");
+
+    if (!Directory.Exists(successFolder)) Directory.CreateDirectory(successFolder);
+
+    List<string> filesToProcess = new List<string>();
+    if (Directory.Exists(failFolder))
+        filesToProcess.AddRange(Directory.GetFiles(failFolder, "*.png"));
+    if (Directory.Exists(unknownFolder))
+        filesToProcess.AddRange(Directory.GetFiles(unknownFolder, "*.png"));
+
+    if (filesToProcess.Count == 0)
+    {
+        Console.WriteLine("수동 분류할 파일이 FAIL 또는 Unknown 폴더에 없습니다.");
+        return;
+    }
+
+    // OcrCorrector.MissionPeopleCount 에서 정답 리스트 추출
+    // OcrCorrector.cs 에서 MissionPeopleCount가 private이므로 Reflection을 사용하거나 임시로 하드코딩된 목록 제공
+    // 여기서는 MissionDictionary의 Value들 중 중복을 제거하고 인원수를 포함한 정답 리스트를 추출
+    // 좀 더 간편하게 MissionPeopleCount 키값을 임시로 하드코딩해서 보여줍니다. (OcrCorrector.cs 내용 기반)
+    var answerList = new List<string>
+    {
+        "한계농지 논밭 습격전 (상위 3명)", "농업진흥구역 방벽 습격전 (상위 5명)", "농업보호구역 농장 폐허 습격전 (상위 15명)",
+        "과수원 중앙 습격전 (상위 50명)", "카페촌 전면도로 습격전 (상위 30명)", "농업진흥구역 경작지 습격전 (상위 30명)", "팔당댐 공원 습격전 (상위 20명)",
+        "외국기업지구 하부 습격전 (상위 20명)", "상업지구 상가단지 습격전 (상위 150명)", "복합지구 중앙 습격전 (상위 10명)",
+        "복합지구 상부공장 습격전 (상위 5명)", "경공업지구 산란지 습격전 (상위 100명)", "중공업지구 상부공장 습격전 (상위 20명)",
+        "산책로 광장 습격전 (상위 3명)", "산책로 중앙 습격전 (상위 50명)", "산책로 두물경 습격전 (상위 150명)",
+        "산책로 B (상위 50명)", "산책로 굽은길 습격전 (상위 15명)", "체험농장 하부 습격전 (상위 30명)", "체험농장 상부 습격전 (상위 10명)",
+        "계곡길 개미굴 습격전 (상위 100명)", "계곡길 개미협곡 습격전 (상위 5명)", "깊은산길 중턱 습격전 (상위 50명)",
+        "깊은산길 개미군락 습격전 (상위 3명)", "운길산 초입 공터 습격전 (상위 100명)", "오솔길 중앙 습격전 (상위 10명)",
+        "서쪽산길 아라크니아 습격전 (상위 150명)", "서쪽산길 폐허 습격전 (상위 15명)"
+    };
+
+    foreach (var file in filesToProcess)
+    {
+        Console.Clear();
+        string fileNameOnly = Path.GetFileName(file);
+        AnsiConsole.MarkupLine($"[yellow]분석 중:[/] {fileNameOnly}");
+
+        string rawText = rec.ReadImageFile(file);
+        string ocrKey = string.IsNullOrWhiteSpace(rawText) ? Path.GetFileNameWithoutExtension(file) : rawText.Replace("\"", "").Replace("\n", " ").Replace("\r", "").Trim();
+
+        AnsiConsole.MarkupLine($"[cyan]추출된 텍스트:[/] {ocrKey}");
+
+        // 이미지 열기 (OS 기본 뷰어)
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = file, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"이미지를 열 수 없습니다: {ex.Message}");
+        }
+
+        // 선택 메뉴 출력
+        Console.WriteLine("\n[정답을 선택하세요] - 주의: 파일 뷰어가 열려있으면 이동/삭제가 실패할 수 있으니 진행 전에 이미지를 닫아주세요.");
+        for (int i = 0; i < answerList.Count; i++)
+        {
+            Console.WriteLine($"{i + 1,2}: {answerList[i]}");
+        }
+        Console.WriteLine("\n[D/d]: 삭제  |  [Enter]: 스킵");
+        Console.Write("선택: ");
+        string input = Console.ReadLine()?.Trim();
+
+        if (string.IsNullOrEmpty(input))
+        {
+            Console.WriteLine("스킵합니다.");
+            continue;
+        }
+
+        if (input.Equals("D", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                File.Delete(file);
+                Console.WriteLine("파일이 삭제되었습니다.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"삭제 실패: {ex.Message}");
+            }
+            continue;
+        }
+
+        if (int.TryParse(input, out int choice) && choice >= 1 && choice <= answerList.Count)
+        {
+            string correctAnswer = answerList[choice - 1];
+
+            // 백데이터 저장
+            try
+            {
+                // 쉼표 대신 탭(Tab) 문자를 구분자로 사용하여 OCR 텍스트 내 쉼표에 의해 파싱이 깨지는 것을 방지
+                string csvLine = $"{ocrKey}\t{correctAnswer}\n";
+                File.AppendAllText(dictionaryPath, csvLine, System.Text.Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"사전 저장 실패: {ex.Message}");
+            }
+
+            // 파일 이동 및 이름 변경
+            string cleanName = correctAnswer.Replace("\r", "").Replace("\n", " ");
+            string safeFileName = string.Join("_", cleanName.Split(Path.GetInvalidFileNameChars()));
+
+            // 기존 타임스탬프 추출 시도
+            string oldFileName = Path.GetFileNameWithoutExtension(file);
+            string timestamp = "";
+            System.Text.RegularExpressions.Match tsMatch = System.Text.RegularExpressions.Regex.Match(oldFileName, @"^(\d{8}_\d{6})");
+            if (tsMatch.Success)
+            {
+                timestamp = tsMatch.Groups[1].Value + "_";
+            }
+            else
+            {
+                timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_";
+            }
+
+            string newFileName = $"{timestamp}{safeFileName}.png";
+            string targetPath = Path.Combine(successFolder, newFileName);
+
+            try
+            {
+                if (File.Exists(targetPath)) File.Delete(targetPath);
+                File.Move(file, targetPath);
+                Console.WriteLine($"-> Success 폴더로 이동됨: {newFileName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"파일 이동 실패: {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("잘못된 입력입니다. 스킵합니다.");
+        }
+    }
 }
 
 
