@@ -1,7 +1,50 @@
+using System.IO;
+
 ﻿namespace Notifier
 {
     public class OcrCorrector
     {
+        private static Dictionary<string, string> UserMissionDictionary = new Dictionary<string, string>();
+
+        static OcrCorrector()
+        {
+            LoadUserDictionary();
+        }
+
+        public static void LoadUserDictionary()
+        {
+            UserMissionDictionary.Clear();
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string dictionaryPath = Path.Combine(desktopPath, "user_dictionary.csv");
+
+            if (File.Exists(dictionaryPath))
+            {
+                try
+                {
+                    string[] lines = File.ReadAllLines(dictionaryPath, System.Text.Encoding.UTF8);
+                    foreach (string line in lines)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        string[] parts = line.Split('\t');
+                        if (parts.Length >= 2)
+                        {
+                            string key = parts[0].Trim();
+                            string value = parts[1].Trim();
+                            if (!string.IsNullOrEmpty(key) && !string.IsNullOrEmpty(value))
+                            {
+                                UserMissionDictionary[key] = value;
+                            }
+                        }
+                    }
+                    Console.WriteLine($"[알림] 사용자 사전(user_dictionary.csv)에서 {UserMissionDictionary.Count}개의 데이터를 불러왔습니다.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[에러] 사용자 사전을 불러오는 중 오류 발생: {ex.Message}");
+                }
+            }
+        }
+
         private static readonly List<string> IgnoredKeywords = new List<string>
         {
             // 1. 공통 포함 단어 (이 단어가 들어가면 무조건 스킵)
@@ -155,6 +198,15 @@
         {
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
 
+            // 0. 사용자 사전 우선 검사
+            foreach (var kvp in UserMissionDictionary)
+            {
+                if (cleanText.Contains(kvp.Key.Replace(" ", "").Replace("\n", "").Replace("\r", "")))
+                {
+                    return (kvp.Value, "Success", "사용자 사전 매칭 성공");
+                }
+            }
+
             // 1. 숫자(인원수) 추출 시도
             int extractedCount = -1;
             // 정규식을 사용하거나 단순히 문자열 내 포함 여부 확인
@@ -260,6 +312,15 @@
         {
             // 1. OCR의 불필요한 공백과 줄바꿈을 모두 제거
             string cleanText = rawOcrText.Replace(" ", "").Replace("\n", "").Replace("\r", "");
+
+            // 0. 사용자 사전 우선 검사
+            foreach (var kvp in UserMissionDictionary)
+            {
+                if (cleanText.Contains(kvp.Key.Replace(" ", "").Replace("\n", "").Replace("\r", "")))
+                {
+                    return (kvp.Value, "Success", "사용자 사전 매칭 성공");
+                }
+            }
 
             // 제외 키워드(어설트) 검사
             string bestAssaultMatch = string.Empty;
