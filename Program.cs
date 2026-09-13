@@ -248,12 +248,12 @@ try {
     {
         Console.Clear();
         string fileNameOnly = Path.GetFileName(file);
-        AnsiConsole.MarkupLine($"[yellow]분석 중:[/] {fileNameOnly}");
+        AnsiConsole.MarkupLine($"[yellow]분석 중:[/] {Markup.Escape(fileNameOnly)}");
 
         string rawText = rec.ReadImageFile(file);
         string ocrKey = string.IsNullOrWhiteSpace(rawText) ? Path.GetFileNameWithoutExtension(file) : rawText.Replace("\"", "").Replace("\n", " ").Replace("\r", "").Trim();
 
-        AnsiConsole.MarkupLine($"[cyan]추출된 텍스트:[/] {ocrKey}");
+        AnsiConsole.MarkupLine($"[cyan]추출된 텍스트:[/] {Markup.Escape(ocrKey)}");
 
         using (var form = new System.Windows.Forms.Form())
         {
