@@ -1,4 +1,9 @@
 ﻿using System.Drawing;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.IO;
 using Tesseract;
 
 namespace Notifier
@@ -38,6 +43,17 @@ namespace Notifier
             {
                 using (Bitmap rawImage = new Bitmap(filePath))
                 {
+                    var msaResponse = ProcessOcrWithMsa(rawImage);
+                    if (!string.IsNullOrEmpty(msaResponse.Result))
+                    {
+                        if (msaResponse.Confidence < 0.8)
+                        {
+                            Console.WriteLine($"[경고] 인식 신뢰도가 낮습니다 ({msaResponse.Confidence}). '알 수 없는 습격전'으로 분류합니다.");
+                            return "알 수 없는 습격전";
+                        }
+                        return msaResponse.Result;
+                    }
+
                     // 플랜 A 시도: 픽셀을 또렷하게 유지하는 방식 (NearestNeighbor)
                     string resultA = ProcessOcrWithStrategy(rawImage, System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor);
 
@@ -96,6 +112,20 @@ namespace Notifier
 
             if (capturedImage == null) return string.Empty;
 
+            // Python MSA 서버를 이용한 OCR 및 매칭 처리
+            var msaResponse = ProcessOcrWithMsa(capturedImage);
+
+            if (!string.IsNullOrEmpty(msaResponse.Result))
+            {
+                if (msaResponse.Confidence < 0.8)
+                {
+                    Console.WriteLine($"[경고] 인식 신뢰도가 낮습니다 ({msaResponse.Confidence}). '알 수 없는 습격전'으로 분류합니다.");
+                    return "알 수 없는 습격전";
+                }
+                return msaResponse.Result;
+            }
+
+            // MSA 서버 통신 실패 또는 결과가 없을 경우 기존 플랜 A, B 시도
             // 플랜 A 시도: 픽셀을 또렷하게 유지하는 방식 (NearestNeighbor)
             string resultA = ProcessOcrWithStrategy(capturedImage, System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor);
 
@@ -277,5 +307,69 @@ DebugImagePath=
 ";
             File.WriteAllText(path, defaultContent);
         }
-    }
+
+        // Python MSA 서버로 이미지를 전송하고 결과를 받아오는 메서드
+
+        private static readonly HttpClient _msaClient = new HttpClient();
+
+        // Python MSA 서버로 이미지를 전송하고 결과를 받아오는 메서드
+        public (string Result, double Confidence) ProcessOcrWithMsa(Bitmap rawImage)
+        {
+            try
+            {
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    rawImage.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                    byte[] imageBytes = ms.ToArray();
+
+                    using (var content = new MultipartFormDataContent())
+                    {
+                        var imageContent = new ByteArrayContent(imageBytes);
+                        imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+                        content.Add(imageContent, "file", "capture.png");
+
+                        // Python MSA 서버 주소 (기본값 localhost:8000)
+                        var responseTask = _msaClient.PostAsync("http://localhost:8000/recognize", content);
+                        responseTask.Wait();
+                        var response = responseTask.Result;
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var readTask = response.Content.ReadAsStringAsync();
+                            readTask.Wait();
+                            string jsonResponse = readTask.Result;
+
+                            using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
+                            {
+                                JsonElement root = doc.RootElement;
+                                string mission = string.Empty;
+                                double confidence = 0.0;
+
+                                if (root.TryGetProperty("recognized_mission", out JsonElement missionElement))
+                                {
+                                    mission = missionElement.GetString();
+                                }
+                                if (root.TryGetProperty("confidence", out JsonElement confidenceElement))
+                                {
+                                    confidence = confidenceElement.GetDouble();
+                                }
+                                return (mission, confidence);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[MSA 서버 통신 에러] Status Code: {response.StatusCode}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MSA 서버 예외] {ex.Message}");
+            }
+
+            return (string.Empty, 0.0);
+        }
+
+}
 }
