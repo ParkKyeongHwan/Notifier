@@ -23,13 +23,21 @@ class OCRModelStub:
                         self.known_labels.add(row["label"])
             print(f"Loaded {len(self.known_labels)} known labels from {csv_path}")
         else:
-            print(f"Warning: {csv_path} not found. Starting with empty known labels.")
-            # 기본 정답 셋 몇 개 하드코딩
-            self.known_labels.update([
-                "계곡길 개미굴 습격전 (상위 100명)",
-                "팔당댐 공원 습격전 (상위 20명)",
-                "농업진흥구역 방벽 습격전 (상위 5명)"
-            ])
+            print(f"Warning: {csv_path} not found. Loading defaults from C# code.")
+            # C# 코드(OcrCorrector.cs)에서 직접 습격전 전체 리스트를 파싱하여 불러옵니다.
+            ocr_corrector_path = Path(__file__).parent.parent / "OcrCorrector.cs"
+            if ocr_corrector_path.exists():
+                with open(ocr_corrector_path, 'r', encoding='utf-8-sig') as cs_file:
+                    cs_content = cs_file.read()
+                    # 정규식을 통해 "XXX 습격전 (상위 N명)" 형태를 모두 추출합니다.
+                    import re
+                    matches = re.findall(r'"([^"]+ 습격전 \([^)]+\))"', cs_content)
+                    if matches:
+                        self.known_labels.update(matches)
+                        print(f"Loaded {len(matches)} known labels directly from OcrCorrector.cs")
+            else:
+                print("Could not find OcrCorrector.cs to load default labels.")
+
 
     def predict(self, image_bytes: bytes):
         """
