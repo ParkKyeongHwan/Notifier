@@ -43,7 +43,7 @@ namespace Notifier
             {
                 using (Bitmap rawImage = new Bitmap(filePath))
                 {
-                    var msaResponse = ProcessOcrWithMsa(rawImage);
+                    var msaResponse = ProcessOcrFromPython(rawImage);
                     if (!string.IsNullOrEmpty(msaResponse.Result))
                     {
                         if (msaResponse.Confidence < 0.8)
@@ -113,7 +113,7 @@ namespace Notifier
             if (capturedImage == null) return string.Empty;
 
             // Python MSA 서버를 이용한 OCR 및 매칭 처리
-            var msaResponse = ProcessOcrWithMsa(capturedImage);
+            var msaResponse = ProcessOcrFromPython(capturedImage);
 
             if (!string.IsNullOrEmpty(msaResponse.Result))
             {
@@ -316,7 +316,7 @@ DebugImagePath=
 
 
         // Python MSA 서버로 이미지를 전송하고 결과를 받아오는 메서드
-        public (string Result, double Confidence) ProcessOcrWithMsa(Bitmap rawImage)
+        public (string Result, double Confidence) ProcessOcrFromPython(Bitmap rawImage)
         {
             try
             {
