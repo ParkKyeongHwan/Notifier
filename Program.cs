@@ -21,24 +21,38 @@ DateTime lastUnknownRaidTime = DateTime.MinValue;
 bool isSleeping = false;
 bool isOnline = false;
 
-// 1. 기존 Windows 콘솔 호스트(cmd, 구형) 대응 크기/위치 설정
+// 1. 기존 Windows 콘솔 크기/위치 설정 (ANSI 포함)
 try
 {
     Console.SetWindowSize(65, 20);
-    System.Threading.Thread.Sleep(100);
+    Console.Write("\x1b[8;20;65t"); // Windows Terminal 강제 크기 조절
+}
+catch { }
+
+System.Threading.Thread.Sleep(100);
+
+try
+{
+    // 2. 창 위치 이동
+    // 1순위: GetConsoleWindow로 시도
     IntPtr handle = NativeMethods.GetConsoleWindow();
+
+    // Windows Terminal의 경우 GetConsoleWindow가 숨겨진 더미 창을 반환할 수 있으므로,
+    // 프로그램 실행 시점의 최상단 활성 창(Terminal 윈도우 자체)을 가져옵니다.
+    IntPtr fgHandle = NativeMethods.GetForegroundWindow();
+
+    // 둘 다 이동시켜 버립니다 (더미 창이든 실제 창이든)
     if (handle != IntPtr.Zero)
     {
         NativeMethods.SetWindowPos(handle, IntPtr.Zero, positionX, positionY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     }
+
+    if (fgHandle != IntPtr.Zero)
+    {
+        NativeMethods.SetWindowPos(fgHandle, IntPtr.Zero, positionX, positionY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    }
 }
 catch { }
-
-// 2. Windows 11 터미널 (Windows Terminal) 대응 크기/위치 설정 (ANSI Escape Sequences)
-// 위치 이동: ESC [ 3 ; X ; Y t (주의: 터미널에서는 Y(Pixel), X(Pixel) 순서일 수 있음, 보통 3;X;Yt 로 창 위치 픽셀 이동 지원 여부는 터미널마다 다르나 표준 Xterm 명령어 활용)
-// 크기 변경: ESC [ 8 ; row ; col t
-Console.Write("\x1b[8;20;65t");
-Console.Write("\x1b[3;0;0t");
 
 // Spectre.Console을 이용한 동작 모드 선택
 var modeSelection = AnsiConsole.Prompt(
