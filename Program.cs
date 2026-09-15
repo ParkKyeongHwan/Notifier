@@ -1,8 +1,6 @@
 ﻿using Notifier;
-using System.Drawing;
-using System.Text.RegularExpressions;
 using Spectre.Console;
-using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
