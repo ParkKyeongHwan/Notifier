@@ -85,6 +85,7 @@ using System.IO;
             "정글",
             "달기지",
             "연구단지",
+            "국지전",
         };
 
         // ==============================================================================
@@ -134,10 +135,7 @@ using System.IO;
             { "개미협곡", "계곡길 개미협곡 습격전 (상위 5명)" },
             { "깊은산길중턱", "깊은산길 중턱 습격전 (상위 50명)" },
             { "개미군락", "깊은산길 개미군락 습격전 (상위 3명)" },
-            { "운길산초입", "운길산 초입 공터 습격전 (상위 100명)" },
-            { "운길산", "운길산 초입 공터 습격전 (상위 100명)" },
-            { "초입", "운길산 초입 공터 습격전 (상위 100명)" },
-            { "공터", "운길산 초입 공터 습격전 (상위 100명)" },
+            { "운길산초입공터", "운길산 초입 공터 습격전 (상위 100명)" },
             { "오솔길중앙", "오솔길 중앙 습격전 (상위 10명)" },
             { "아라크니아", "서쪽산길 아라크니아 습격전 (상위 150명)" },
             { "서쪽산길폐허", "서쪽산길 폐허 습격전 (상위 15명)" },
@@ -207,7 +205,44 @@ using System.IO;
                 }
             }
 
-            // 1. 숫자(인원수) 추출 시도
+            // 1. 제외 키워드(어설트) 우선 검사
+            // 숫자 추출 이전에 검사하여, 어썰트 이미지 내에 있는 시간 등 숫자가 인원수로 오인되는 것을 방지합니다.
+            string bestAssaultMatch = string.Empty;
+            int bestAssaultLength = -1;
+
+            foreach (var ignored in IgnoredKeywords)
+            {
+                if (cleanText.Length < ignored.Length) continue;
+
+                for (int i = 0; i <= cleanText.Length - ignored.Length; i++)
+                {
+                    string window = cleanText.Substring(i, ignored.Length);
+
+                    // 짧은 단어(2글자 이하)는 오타를 허용하지 않음 (false positive 방지)
+                    int allowedErrors = 0;
+                    if (ignored.Length >= 5) allowedErrors = 2;
+                    else if (ignored.Length >= 3) allowedErrors = 1;
+
+                    if (ComputeLevenshteinDistance(window, ignored) <= allowedErrors)
+                    {
+                        // "어설트" 같은 공통 단어보다 길고 구체적인 단어(예: "경성역", "피라미드")를 우선함
+                        if (ignored.Length > bestAssaultLength ||
+                            (ignored.Length == bestAssaultLength && ignored != "어설트" && ignored != "침공"))
+                        {
+                            bestAssaultMatch = ignored;
+                            bestAssaultLength = ignored.Length;
+                        }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(bestAssaultMatch))
+            {
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 어설트 감지 ('{bestAssaultMatch}').");
+                return ($"어설트 ({bestAssaultMatch})", "Assault", "예외 키워드(어설트) 감지");
+            }
+
+            // 2. 숫자(인원수) 추출 시도
             int extractedCount = -1;
             // 정규식을 사용하거나 단순히 문자열 내 포함 여부 확인
             // 흔한 인원수: 3, 5, 10, 15, 20, 30, 50, 100, 150
@@ -322,7 +357,8 @@ using System.IO;
                 }
             }
 
-            // 제외 키워드(어설트) 검사
+            // ExtractMissionNameEnhanced에서 이미 어썰트 검사를 했겠지만,
+            // 직접 ExtractMissionName을 호출하는 경우를 대비해 어썰트 검사를 유지합니다.
             string bestAssaultMatch = string.Empty;
             int bestAssaultLength = -1;
 
