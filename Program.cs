@@ -10,8 +10,8 @@ string targetWindow = "이터널시티";
 
 const uint SWP_NOSIZE = 0x0001;
 const uint SWP_NOZORDER = 0x0004;
-int positionX = 1200;
-int positionY = 5;
+int positionX = 0;
+int positionY = 0;
 
 string lastMessage = string.Empty;
 DateTime lastMessageTime = DateTime.MinValue;
@@ -21,13 +21,16 @@ DateTime lastUnknownRaidTime = DateTime.MinValue;
 bool isSleeping = false;
 bool isOnline = false;
 
+Console.SetWindowSize(65, 20);
+
+// 창 크기 변경 후 OS가 창 위치를 재설정하는 것을 방지하기 위해 짧게 대기
+System.Threading.Thread.Sleep(100);
+
 IntPtr handle = NativeMethods.GetConsoleWindow();
 if (handle != IntPtr.Zero)
 {
     NativeMethods.SetWindowPos(handle, IntPtr.Zero, positionX, positionY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
-
-Console.SetWindowSize(80, 5);
 
 // Spectre.Console을 이용한 동작 모드 선택
 var modeSelection = AnsiConsole.Prompt(
