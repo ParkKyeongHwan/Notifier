@@ -1,8 +1,6 @@
 ﻿using Notifier;
-using System.Drawing;
-using System.Text.RegularExpressions;
 using Spectre.Console;
-using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
@@ -17,19 +15,15 @@ string lastMessage = string.Empty;
 DateTime lastMessageTime = DateTime.MinValue;
 DateTime lastUnknownRaidTime = DateTime.MinValue;
 
-// ★ 추가: 현재 절전 모드 상태인지 추적하는 변수 (콘솔 도배 방지용)
 bool isSleeping = false;
-bool isOnline = false;
 
-// 1. 기존 Windows 콘솔 크기/위치 설정 (ANSI 포함)
 try
 {
-    Console.SetWindowSize(65, 20);
-    Console.Write("\x1b[8;20;65t"); // Windows Terminal 강제 크기 조절
+    Console.Write("\x1b[8;7;120t"); // Windows Terminal 강제 크기 조절
 }
 catch { }
 
-System.Threading.Thread.Sleep(100);
+Thread.Sleep(100);
 
 try
 {
@@ -113,22 +107,13 @@ while (true)
             int seconds = sleepDuration.Seconds;
 
             Console.WriteLine($"[{now:HH:mm:ss}] 대기 시간입니다. {hours}시간 {minutes}분 {seconds}초 후(오후 7시)에 알림 감지를 재개합니다.");
-            //await DiscordNotifier.SendMessageAsync($"습격전 감지 프로그램 [{now:HH:mm:ss}] 대기 시간입니다. {hours}시간 {minutes}분 {seconds}초 후(오후 7시)에 알림 감지를 재개합니다.");
             isSleeping = true;
-            isOnline = false;
         }
 
         // 4. 남은 시간만큼 한방에 통째로 대기
         await Task.Delay(sleepDuration);
         continue;
     }
-
-    //if (!isOnline)
-    //{
-    //    await DiscordNotifier.SendMessageAsync("습격전 감지 프로그램이 동작합니다");
-    //}
-
-    isOnline = true;
 
     // --- 아래부터는 기존의 캡처 및 OCR 로직이 그대로 들어갑니다 ---
 
