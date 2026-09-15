@@ -1,6 +1,8 @@
 ﻿using Notifier;
-using Spectre.Console;
+using System.Drawing;
 using System.Text.RegularExpressions;
+using Spectre.Console;
+using System.Diagnostics;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
@@ -20,6 +22,9 @@ bool isSleeping = false;
 bool isOnline = false;
 
 Console.SetWindowSize(65, 20);
+
+// 창 크기 변경 후 OS가 창 위치를 재설정하는 것을 방지하기 위해 짧게 대기
+System.Threading.Thread.Sleep(100);
 
 IntPtr handle = NativeMethods.GetConsoleWindow();
 if (handle != IntPtr.Zero)
