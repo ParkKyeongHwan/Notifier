@@ -313,6 +313,9 @@ DebugImagePath=
         private static readonly HttpClient _msaClient = new HttpClient();
 
         // Python MSA 서버로 이미지를 전송하고 결과를 받아오는 메서드
+
+
+        // Python MSA 서버로 이미지를 전송하고 결과를 받아오는 메서드
         public (string Result, double Confidence) ProcessOcrWithMsa(Bitmap rawImage)
         {
             try
@@ -331,34 +334,36 @@ DebugImagePath=
                         // Python MSA 서버 주소 (기본값 localhost:8000)
                         var responseTask = _msaClient.PostAsync("http://localhost:8000/recognize", content);
                         responseTask.Wait();
-                        var response = responseTask.Result;
 
-                        if (response.IsSuccessStatusCode)
+                        using (var response = responseTask.Result)
                         {
-                            var readTask = response.Content.ReadAsStringAsync();
-                            readTask.Wait();
-                            string jsonResponse = readTask.Result;
-
-                            using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
+                            if (response.IsSuccessStatusCode)
                             {
-                                JsonElement root = doc.RootElement;
-                                string mission = string.Empty;
-                                double confidence = 0.0;
+                                var readTask = response.Content.ReadAsStringAsync();
+                                readTask.Wait();
+                                string jsonResponse = readTask.Result;
 
-                                if (root.TryGetProperty("recognized_mission", out JsonElement missionElement))
+                                using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
                                 {
-                                    mission = missionElement.GetString();
+                                    JsonElement root = doc.RootElement;
+                                    string mission = string.Empty;
+                                    double confidence = 0.0;
+
+                                    if (root.TryGetProperty("recognized_mission", out JsonElement missionElement))
+                                    {
+                                        mission = missionElement.GetString() ?? string.Empty;
+                                    }
+                                    if (root.TryGetProperty("confidence", out JsonElement confidenceElement))
+                                    {
+                                        confidence = confidenceElement.GetDouble();
+                                    }
+                                    return (mission, confidence);
                                 }
-                                if (root.TryGetProperty("confidence", out JsonElement confidenceElement))
-                                {
-                                    confidence = confidenceElement.GetDouble();
-                                }
-                                return (mission, confidence);
                             }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[MSA 서버 통신 에러] Status Code: {response.StatusCode}");
+                            else
+                            {
+                                Console.WriteLine($"[MSA 서버 통신 에러] Status Code: {response.StatusCode}");
+                            }
                         }
                     }
                 }
@@ -370,6 +375,7 @@ DebugImagePath=
 
             return (string.Empty, 0.0);
         }
+
 
 }
 }
