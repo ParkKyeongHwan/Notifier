@@ -45,14 +45,13 @@ class OCRModelStub:
         # 실제로는 OCR이 읽은 텍스트(예: '계곡길 개미굴 습격전')와
         # self.known_labels 중 가장 유사한 것을 반환합니다.
 
-        # 테스트를 위해 항상 알 수 없는 습격전 반환 확률을 낮추고,
-        # 임의의(혹은 첫 번째) known label을 반환하는 척 합니다.
-        if not self.known_labels:
-            return {"result": "알 수 없는 습격전", "confidence": 0.0, "message": "No known labels"}
+        # [버그 픽스]: 더미 로직이 무조건 0.95 확률로 첫 번째 known label을 반환하면,
+        # C# 쪽(Recognizer.cs)에서 이 값을 맹신하여 로컬 방어 로직(어썰트 차단 등)을 모두 스킵하는 문제가 발생합니다.
+        # 실제 모델이 연동되기 전까지는 낮은 신뢰도(0.0)로 반환하여,
+        # C# 쪽의 OcrCorrector.cs 방어 로직이 정상적으로 실행되도록 유도합니다.
 
-        dummy_result = list(self.known_labels)[0]
         return {
-            "result": dummy_result,
-            "confidence": 0.95, # 매우 높다고 가정
-            "message": "Stub OCR prediction"
+            "result": "",
+            "confidence": 0.0,
+            "message": "Stub OCR prediction - Waiting for real model integration"
         }
