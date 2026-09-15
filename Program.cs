@@ -21,16 +21,24 @@ DateTime lastUnknownRaidTime = DateTime.MinValue;
 bool isSleeping = false;
 bool isOnline = false;
 
-Console.SetWindowSize(65, 20);
-
-// 창 크기 변경 후 OS가 창 위치를 재설정하는 것을 방지하기 위해 짧게 대기
-System.Threading.Thread.Sleep(100);
-
-IntPtr handle = NativeMethods.GetConsoleWindow();
-if (handle != IntPtr.Zero)
+// 1. 기존 Windows 콘솔 호스트(cmd, 구형) 대응 크기/위치 설정
+try
 {
-    NativeMethods.SetWindowPos(handle, IntPtr.Zero, positionX, positionY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    Console.SetWindowSize(65, 20);
+    System.Threading.Thread.Sleep(100);
+    IntPtr handle = NativeMethods.GetConsoleWindow();
+    if (handle != IntPtr.Zero)
+    {
+        NativeMethods.SetWindowPos(handle, IntPtr.Zero, positionX, positionY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    }
 }
+catch { }
+
+// 2. Windows 11 터미널 (Windows Terminal) 대응 크기/위치 설정 (ANSI Escape Sequences)
+// 위치 이동: ESC [ 3 ; X ; Y t (주의: 터미널에서는 Y(Pixel), X(Pixel) 순서일 수 있음, 보통 3;X;Yt 로 창 위치 픽셀 이동 지원 여부는 터미널마다 다르나 표준 Xterm 명령어 활용)
+// 크기 변경: ESC [ 8 ; row ; col t
+Console.Write("\x1b[8;20;65t");
+Console.Write("\x1b[3;0;0t");
 
 // Spectre.Console을 이용한 동작 모드 선택
 var modeSelection = AnsiConsole.Prompt(
