@@ -14,6 +14,9 @@ echo.
 echo 3초 후 학습을 시작합니다...
 timeout /t 3 >nul
 
+REM 가상환경(venv) 활성화
+call "%~dp0venv\Scripts\activate.bat"
+
 REM 데이터셋 절대 경로 설정 (이 배치 파일이 있는 폴더 안의 data_lmdb)
 set "DATA_PATH=%~dp0data_lmdb"
 
