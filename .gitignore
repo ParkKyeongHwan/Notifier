@@ -431,6 +431,5 @@ FodyWeavers.xsd
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
 python_service/venv
-python_service/cmd.txt
 python_service/dataset.csv
 python_service/train_data
