@@ -14,12 +14,25 @@ echo.
 echo 3초 후 학습을 시작합니다...
 timeout /t 3 >nul
 
-:: 방금 생성하신 LMDB 데이터셋의 경로입니다.
-set DATA_PATH=../python_service/data_lmdb
+REM 데이터셋 절대 경로 설정 (이 배치 파일이 있는 폴더 안의 data_lmdb)
+set "DATA_PATH=%~dp0data_lmdb"
 
-:: 학습 명령어
-:: 만약 기존 EasyOCR 모델 파일(.pth)을 다운받으셨다면,
-:: 아래 명령어 맨 끝에 --saved_model ./korean_g2.pth 와 같은 옵션을 추가하시면 더 빨리 학습(Fine-tuning)이 됩니다.
+REM 형제 폴더인 deep-text-recognition-benchmark 로 이동
+REM %~dp0 는 현재 배치파일이 위치한 폴더(Notifier\python_service\)입니다.
+cd /d "%~dp0..\..\deep-text-recognition-benchmark"
+
+REM 만약 폴더가 없으면 에러 메시지 출력 후 종료
+if not exist "train.py" (
+    echo.
+    echo [오류] deep-text-recognition-benchmark 폴더를 찾을 수 없거나 train.py가 없습니다.
+    echo 폴더 위치가 Notifier 폴더와 같은 위치에 있는지 확인해 주세요.
+    pause
+    exit /b 1
+)
+
+REM 학습 명령어
+REM 만약 기존 EasyOCR 모델 파일(.pth)을 다운받으셨다면,
+REM 아래 명령어 맨 끝에 --saved_model ./korean_g2.pth 와 같은 옵션을 추가하시면 더 빨리 학습(Fine-tuning)이 됩니다.
 python train.py --train_data "%DATA_PATH%" --valid_data "%DATA_PATH%" --select_data / --batch_ratio 1.0 --Transformation TPS --FeatureExtraction ResNet --SequenceModeling BiLSTM --Prediction CTC --batch_size 32 --valInterval 500
 
 pause

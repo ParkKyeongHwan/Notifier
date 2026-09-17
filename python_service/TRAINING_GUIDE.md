@@ -5,22 +5,23 @@
 ## 1. 사전 준비 사항 (중요!)
 
 이 학습 과정은 우리가 만든 Python 서비스가 아니라, EasyOCR의 원천 기술을 만든 **Clova AI의 학습 레포지토리**에서 진행해야 합니다.
-만약 아직 받지 않으셨다면 터미널에서 다음 명령어를 실행하여 학습용 코드를 다운로드 받아주세요.
+만약 아직 받지 않으셨다면 `Notifier` 폴더와 같은 위치에 학습용 코드를 다운로드 받아주세요.
 
 ```cmd
+# Notifier 폴더의 바깥쪽(Project 폴더 등)에서 실행하세요.
 git clone https://github.com/clovaai/deep-text-recognition-benchmark
-cd deep-text-recognition-benchmark
 ```
 
 ## 2. 학습 실행하기
 
-우리가 만든 배치 파일(`run_training.bat`)을 다운받은 `deep-text-recognition-benchmark` 폴더 안으로 복사하거나 이동시킨 뒤, 더블클릭하여 실행하세요. (또는 터미널에서 실행하셔도 됩니다.)
+우리가 만든 배치 파일(`run_training.bat`)은 똑똑하게 만들어져 있어서 **파일을 이동시킬 필요가 없습니다.**
+그냥 `Notifier\python_service` 폴더 안에 있는 `run_training.bat`을 더블클릭하여 실행하세요. (또는 해당 폴더 내의 터미널에서 실행하셔도 됩니다.)
 
 ```cmd
-:: 위에서 다운로드 받은 폴더 안으로 이동하여 실행
-copy ..\python_service\run_training.bat .
+# Notifier\python_service 폴더 안에서 실행
 run_training.bat
 ```
+*(주의: 배치 파일을 `deep-text-recognition-benchmark` 폴더 안으로 옮기면 경로가 꼬여서 에러가 날 수 있으니 절대 옮기지 마세요!)*
 
 ## 3. 학습이 잘 진행되고 있는지 어떻게 알 수 있나요?
 
