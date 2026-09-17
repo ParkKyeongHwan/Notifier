@@ -30,9 +30,10 @@ async def recognize_image(file: UploadFile = File(...)):
 
         return JSONResponse(content={
             "filename": file.filename,
-            "recognized_mission": prediction["result"],
-            "confidence": prediction["confidence"],
-            "message": prediction["message"]
+            "recognized_mission": prediction.get("result", "미발견"),
+            "confidence": prediction.get("confidence", 0.0),
+            "category": prediction.get("category", "None"),
+            "message": prediction.get("message", "")
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

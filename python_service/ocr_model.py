@@ -1,11 +1,33 @@
 import os
 import csv
+import io
+import re
 from pathlib import Path
+from PIL import Image
+import numpy as np
+
+# We import easyocr inside the class so it doesn't crash on import if not installed
+# but we need it for the model.
+try:
+    import easyocr
+except ImportError:
+    easyocr = None
+
+from thefuzz import fuzz
+from thefuzz import process
 
 class OCRModelStub:
     def __init__(self, dataset_csv="dataset.csv"):
         self.known_labels = set()
         self.load_known_labels(dataset_csv)
+        self.reader = None
+
+        if easyocr is not None:
+            # Initialize EasyOCR for Korean and English
+            print("Initializing EasyOCR Model (ko, en)... This might take a moment.")
+            self.reader = easyocr.Reader(['ko', 'en'], gpu=False) # set gpu=True if CUDA is available
+        else:
+            print("Warning: easyocr is not installed. Please pip install easyocr.")
 
     def load_known_labels(self, csv_path):
         if os.path.exists(csv_path):
@@ -17,13 +39,10 @@ class OCRModelStub:
             print(f"Loaded {len(self.known_labels)} known labels from {csv_path}")
         else:
             print(f"Warning: {csv_path} not found. Loading defaults from C# code.")
-            # C# 코드(OcrCorrector.cs)에서 직접 습격전 전체 리스트를 파싱하여 불러옵니다.
             ocr_corrector_path = Path(__file__).parent.parent / "OcrCorrector.cs"
             if ocr_corrector_path.exists():
                 with open(ocr_corrector_path, 'r', encoding='utf-8-sig') as cs_file:
                     cs_content = cs_file.read()
-                    # 정규식을 통해 "XXX 습격전 (상위 N명)" 형태를 모두 추출합니다.
-                    import re
                     matches = re.findall(r'"([^"]+ 습격전 \([^)]+\))"', cs_content)
                     if matches:
                         self.known_labels.update(matches)
@@ -31,27 +50,102 @@ class OCRModelStub:
             else:
                 print("Could not find OcrCorrector.cs to load default labels.")
 
+        # Also load some ignored keywords to skip Assault
+        self.ignored_keywords = [
+            "어설트", "패러사이트", "침공", "거미의숲", "시공", "바벨탑",
+            "불시착", "부산행", "나로도", "우주센터", "우주", "마추픽추",
+            "마추", "픽추", "모선", "유령선", "보르네오섬", "보르", "피라미드",
+            "피라", "대마도", "명성황후", "명성", "마피아저택", "마피아",
+            "하수도", "경성역", "시티", "시티타워", "한강둔치", "트랜실바니아",
+            "트랜실", "정글", "달기지", "연구단지", "국지전"
+        ]
 
     def predict(self, image_bytes: bytes):
-        """
-        실제 파인튜닝된 OCR 모델이 텍스트를 추출하고 교정하는 로직이 들어갈 자리입니다.
-        현재는 Stub 형태로, 성공적인 응답의 예시 형식을 반환합니다.
-        """
-        # TODO: PIL이나 OpenCV로 image_bytes 디코딩
-        # TODO: OCR 모델 인퍼런스
-        # TODO: 텍스트 매칭 및 교정 알고리즘 적용
+        if self.reader is None:
+            return {
+                "result": "미발견",
+                "confidence": 0.0,
+                "message": "EasyOCR not installed."
+            }
 
-        # 임시 모의 로직:
-        # 실제로는 OCR이 읽은 텍스트(예: '계곡길 개미굴 습격전')와
-        # self.known_labels 중 가장 유사한 것을 반환합니다.
+        try:
+            # 1. Decode Image
+            image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+            img_np = np.array(image)
 
-        # [버그 픽스]: 더미 로직이 무조건 0.95 확률로 첫 번째 known label을 반환하면,
-        # C# 쪽(Recognizer.cs)에서 이 값을 맹신하여 로컬 방어 로직(어썰트 차단 등)을 모두 스킵하는 문제가 발생합니다.
-        # 실제 모델이 연동되기 전까지는 낮은 신뢰도(0.0)로 반환하여,
-        # C# 쪽의 OcrCorrector.cs 방어 로직이 정상적으로 실행되도록 유도합니다.
+            # 2. Run EasyOCR
+            # readtext returns a list of tuples: (bounding_box, text, confidence)
+            results = self.reader.readtext(img_np)
 
-        return {
-            "result": "",
-            "confidence": 0.0,
-            "message": "Stub OCR prediction - Waiting for real model integration"
-        }
+            # Combine all extracted text into one string without spaces
+            raw_text = "".join([res[1] for res in results]).replace(" ", "").replace("\n", "").replace("\r", "")
+
+            print(f"EasyOCR Extracted Raw Text: {raw_text}")
+
+            if not raw_text:
+                return {
+                    "result": "미발견",
+                    "confidence": 0.0,
+                    "message": "No text detected."
+                }
+
+            # 3. Assault Check
+            for ignored in self.ignored_keywords:
+                if ignored in raw_text:
+                    return {
+                        "result": f"어설트 ({ignored})",
+                        "confidence": 1.0,
+                        "category": "Assault",
+                        "message": "예외 키워드(어설트) 감지"
+                    }
+
+            # 4. Fuzzy Matching with known labels
+            if self.known_labels:
+                # We use token_sort_ratio for robust matching
+                best_match, score = process.extractOne(raw_text, list(self.known_labels), scorer=fuzz.partial_ratio)
+
+                print(f"Best match: {best_match} (Score: {score})")
+
+                if score >= 75: # Threshold for considering it a success
+                    return {
+                        "result": best_match,
+                        "confidence": score / 100.0,
+                        "category": "Success",
+                        "message": f"Fuzzy matching success (Score: {score})"
+                    }
+                else:
+                    # Try to extract numbers (people count) as a fallback
+                    match = re.search(r'\d+', raw_text)
+                    if match:
+                        num = match.group()
+                        return {
+                            "result": f"알 수 없는 습격전 (상위 {num}명)",
+                            "confidence": score / 100.0,
+                            "category": "Unknown",
+                            "message": f"Low match score ({score}), but extracted people count ({num})."
+                        }
+
+            # Fallback
+            if "습격" in raw_text or "습" in raw_text or "격" in raw_text:
+                 return {
+                    "result": "알 수 없는 습격전",
+                    "confidence": 0.0,
+                    "category": "Unknown",
+                    "message": "Fallback: Found '습' or '격'."
+                }
+
+            return {
+                "result": "미발견",
+                "confidence": 0.0,
+                "category": "None",
+                "message": "매칭 실패"
+            }
+
+        except Exception as e:
+            print(f"Error during OCR prediction: {e}")
+            return {
+                "result": "미발견",
+                "confidence": 0.0,
+                "category": "None",
+                "message": str(e)
+            }

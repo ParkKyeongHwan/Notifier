@@ -1,6 +1,9 @@
 ﻿using Notifier;
 using Spectre.Console;
 using System.Text.RegularExpressions;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
 
 var recognizer = new Recognizer("config.txt");
 var windowTracker = new WindowTracker();
@@ -65,7 +68,7 @@ AnsiConsole.MarkupLine($"선택된 모드: [green]{modeSelection}[/]");
 
 if (modeSelection == "3. FAIL / Unknown 폴더 이미지 재분석 및 정리")
 {
-    RunFailFolderReanalysis(recognizer);
+    await RunFailFolderReanalysisAsync(recognizer);
     Console.WriteLine("재분석이 완료되었습니다. 프로그램을 종료하려면 아무 키나 누르세요.");
     Console.ReadKey();
     return;
@@ -134,7 +137,7 @@ while (true)
         string rawText = recognizer.ReadSpecificText(bounds.X, bounds.Y, out capturedImage);
         Console.WriteLine(rawText);
 
-        var extractionResult = OcrCorrector.ExtractMissionName(rawText);
+        var extractionResult = await PythonApiExtractMissionNameFromBitmapAsync(capturedImage);
         string extractedText = extractionResult.Name;
         string category = extractionResult.Category;
         // Reason is ignored in real-time capture
@@ -213,6 +216,90 @@ while (true)
 
     // 항상 10초 대기
     await Task.Delay(10000);
+}
+
+
+
+static async Task<(string Name, string Category, string Reason)> PythonApiExtractMissionNameAsync(string imageFilePath)
+{
+    try
+    {
+        using (var httpClient = new HttpClient())
+        {
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+            using (var form = new MultipartFormDataContent())
+            {
+                var fileBytes = File.ReadAllBytes(imageFilePath);
+                var fileContent = new ByteArrayContent(fileBytes);
+                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+                form.Add(fileContent, "file", Path.GetFileName(imageFilePath));
+
+                var response = await httpClient.PostAsync("http://localhost:8000/recognize", form);
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseStr = await response.Content.ReadAsStringAsync();
+                    using (JsonDocument doc = JsonDocument.Parse(responseStr))
+                    {
+                        var root = doc.RootElement;
+                        string name = root.GetProperty("recognized_mission").GetString() ?? "미발견";
+                        string category = root.GetProperty("category").GetString() ?? "None";
+                        string reason = root.GetProperty("message").GetString() ?? "";
+                        return (name, category, reason);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[API Error] Status: {response.StatusCode}");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[API Exception] {ex.Message}");
+    }
+    return ("미발견", "None", "API 연결 실패");
+}
+
+static async Task<(string Name, string Category, string Reason)> PythonApiExtractMissionNameFromBitmapAsync(Bitmap bitmap)
+{
+    try
+    {
+        using (var httpClient = new HttpClient())
+        {
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+            using (var form = new MultipartFormDataContent())
+            {
+                using (var ms = new MemoryStream())
+                {
+                    bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                    var fileBytes = ms.ToArray();
+                    var fileContent = new ByteArrayContent(fileBytes);
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+                    form.Add(fileContent, "file", "capture.png");
+
+                    var response = await httpClient.PostAsync("http://localhost:8000/recognize", form);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var responseStr = await response.Content.ReadAsStringAsync();
+                        using (JsonDocument doc = JsonDocument.Parse(responseStr))
+                        {
+                            var root = doc.RootElement;
+                            string name = root.GetProperty("recognized_mission").GetString() ?? "미발견";
+                            string category = root.GetProperty("category").GetString() ?? "None";
+                            string reason = root.GetProperty("message").GetString() ?? "";
+                            return (name, category, reason);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[API Exception] {ex.Message}");
+    }
+    return ("미발견", "None", "API 연결 실패");
 }
 
 
@@ -457,7 +544,7 @@ try {
 }
 
 
-void RunFailFolderReanalysis(Recognizer rec)
+async Task RunFailFolderReanalysisAsync(Recognizer rec)
 {
     string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
     string failFolder = Path.Combine(desktopPath, "FAIL");
@@ -588,7 +675,7 @@ void RunFailFolderReanalysis(Recognizer rec)
         // 로깅을 위해 원본 텍스트의 특수문자 제거
         string csvSafeRawText = string.IsNullOrWhiteSpace(rawText) ? "EMPTY" : rawText.Replace("\"", "\"\"").Replace("\n", " ").Replace("\r", "");
 
-        var result = OcrCorrector.ExtractMissionNameEnhanced(rawText);
+        var result = await PythonApiExtractMissionNameAsync(file);
         Console.WriteLine($"  -> 매칭 결과: {result.Name} (Category: {result.Category}, Reason: {result.Reason})");
 
         string csvSafeName = string.IsNullOrWhiteSpace(result.Name) ? "EMPTY" : result.Name.Replace("\"", "\"\"");
