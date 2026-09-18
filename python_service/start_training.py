@@ -75,8 +75,8 @@ def main():
 
     cmd = [
         sys.executable, str(train_py),
-        "--train_data", str(data_path),
-        "--valid_data", str(data_path),
+        "--train_data", str(data_path / "train"),
+        "--valid_data", str(data_path / "valid"),
         "--select_data", "/",
         "--batch_ratio", "1.0",
         "--Transformation", "TPS",
