@@ -23,9 +23,41 @@ class OCRModelStub:
         self.reader = None
 
         if easyocr is not None:
-            # Initialize EasyOCR for Korean and English
+            # Check for fine-tuned model
+            import shutil
+            import torch
+            models_dir = Path(__file__).parent / "saved_models"
+            best_model_path = models_dir / "best_accuracy.pth"
+            custom_model_path = models_dir / "custom_ocr.pth"
+
+            # Initialize EasyOCR for Korean and English normally first to get the default architecture
             print("Initializing EasyOCR Model (ko, en)... This might take a moment.")
-            self.reader = easyocr.Reader(['ko', 'en'], gpu=False) # set gpu=True if CUDA is available
+            self.reader = easyocr.Reader(['ko', 'en'], gpu=False)
+
+            # If a new best model exists, rename it so we don't apply it every boot, but we save it as our custom weights
+            if best_model_path.exists():
+                print(f"Found newly trained model: {best_model_path}. Applying...")
+                try:
+                    shutil.copy2(best_model_path, custom_model_path)
+                    best_model_path.rename(models_dir / "best_accuracy_applied.pth")
+                except Exception as e:
+                    print(f"Warning: Failed to move trained model: {e}")
+
+            # If our custom fine-tuned weights exist, dynamically load them into the pre-initialized model
+            if custom_model_path.exists():
+                print(f"Loading custom fine-tuned weights from {custom_model_path}...")
+                try:
+                    state_dict = torch.load(str(custom_model_path), map_location='cpu')
+                    # Remove 'module.' prefix if the model was trained with DataParallel
+                    new_state_dict = {}
+                    for k, v in state_dict.items():
+                        name = k[7:] if k.startswith('module.') else k
+                        new_state_dict[name] = v
+
+                    self.reader.recognizer.load_state_dict(new_state_dict)
+                    print("Custom weights successfully applied!")
+                except Exception as e:
+                    print(f"Error loading custom weights, falling back to default: {e}")
         else:
             print("Warning: easyocr is not installed. Please pip install easyocr.")
 
