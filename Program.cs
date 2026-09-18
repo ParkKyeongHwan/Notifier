@@ -167,7 +167,7 @@ while (true)
         {
             try
             {
-                if (category != "Assault")
+                if (category != "Assault" && category != "Success")
                 {
                     string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     string targetFolder = Path.Combine(desktopPath, category);
@@ -567,8 +567,8 @@ async Task RunFailFolderReanalysisAsync(Recognizer rec)
         Console.WriteLine($"[에러] 로그 파일을 생성할 수 없습니다: {ex.Message}");
     }
 
-    // 0. Unknown 및 Temp 폴더 검사: "알 수 없는 습격전_"과 실제 미션 이름이 동시에 포함된 오분류 파일 복구
-    string[] foldersToCheck = { unknownFolder, tempFolder };
+    // 0. Unknown, Temp, FAIL 폴더 검사: "알 수 없는 습격전_"과 실제 미션 이름이 동시에 포함된 오분류 파일 복구
+    string[] foldersToCheck = { unknownFolder, tempFolder, failFolder };
     foreach (var folder in foldersToCheck)
     {
         if (Directory.Exists(folder))
