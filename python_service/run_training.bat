@@ -19,6 +19,10 @@ if exist "%~dp0venv\Scripts\activate.bat" (
     echo [Info] venv 가상환경을 찾지 못했습니다. 시스템 파이썬을 사용합니다.
 )
 
+REM 패키지 설치 확인 및 설치 진행
+echo [Info] requirements.txt 패키지 설치 확인 및 설치 진행...
+pip install -r "%~dp0requirements.txt"
+
 REM 파이썬 스크립트 실행
 python "%~dp0start_training.py"
 
