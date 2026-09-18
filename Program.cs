@@ -161,13 +161,13 @@ while (true)
                 extractedText = string.IsNullOrWhiteSpace(rawText) ? "미발견" : rawText.Trim();
             }
         }
-        else if (category == "Success" || category == "Assault")
+        else if (category == "Success")
         {
             if (extractedText != lastMessage || (DateTime.Now - lastMessageTime).TotalMinutes >= 2)
             {
                 lastMessage = extractedText;
                 lastMessageTime = DateTime.Now;
-                _ = DiscordNotifier.SendMessageAsync($"미션이 발생했습니다: {extractedText}");
+                _ = DiscordNotifier.SendMessageAsync($"잠시 후에 {extractedText}(이)가 시작됩니다.");
             }
         }
 
