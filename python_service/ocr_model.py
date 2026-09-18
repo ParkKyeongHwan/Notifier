@@ -146,15 +146,15 @@ class OCRModelStub:
                         "message": f"Fuzzy matching success (Score: {score})"
                     }
                 else:
-                    # Try to extract numbers (people count) as a fallback
+                    # Try to extract numbers (people count) as a fallback, BUT ONLY if '습' or '격' is present
                     match = re.search(r'\d+', raw_text)
-                    if match:
+                    if match and ("습격" in raw_text or "습" in raw_text or "격" in raw_text):
                         num = match.group()
                         return {
                             "result": f"알 수 없는 습격전 (상위 {num}명)",
                             "confidence": score / 100.0,
                             "category": "Unknown",
-                            "message": f"Low match score ({score}), but extracted people count ({num})."
+                            "message": f"Low match score ({score}), but extracted people count ({num}) and found '습' or '격'."
                         }
 
             # Fallback

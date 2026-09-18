@@ -153,6 +153,10 @@ while (true)
                 extractedText = $"알 수 없는 습격전 (상위 {playerNum}명)";
             }
         }
+        else if (category == "Assault")
+        {
+            // Do not override Assault category. Assault shouldn't be categorized as FAIL.
+        }
         else if (category == "None")
         {
             category = "FAIL";
@@ -786,6 +790,19 @@ async Task RunFailFolderReanalysisAsync(Recognizer rec)
                 File.Delete(file);
                 deletedCount++;
                 Console.WriteLine($"  -> [삭제] 가비지 데이터(None)로 판별되어 삭제되었습니다.\n");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  -> [에러] 파일 삭제 실패: {ex.Message}\n");
+            }
+        }
+        else if (result.Category == "Assault")
+        {
+            try
+            {
+                File.Delete(file);
+                deletedCount++;
+                Console.WriteLine($"  -> [삭제] 어설트(Assault) 데이터로 판별되어 삭제되었습니다.\n");
             }
             catch (Exception ex)
             {
