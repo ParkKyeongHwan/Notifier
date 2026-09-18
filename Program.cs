@@ -161,6 +161,15 @@ while (true)
                 extractedText = string.IsNullOrWhiteSpace(rawText) ? "미발견" : rawText.Trim();
             }
         }
+        else if (category == "Success" || category == "Assault")
+        {
+            if (extractedText != lastMessage || (DateTime.Now - lastMessageTime).TotalMinutes >= 2)
+            {
+                lastMessage = extractedText;
+                lastMessageTime = DateTime.Now;
+                _ = DiscordNotifier.SendMessageAsync($"미션이 발생했습니다: {extractedText}");
+            }
+        }
 
         // 이미지 저장 로직
         if (capturedImage != null)
