@@ -432,4 +432,3 @@ FodyWeavers.xsd
 #*.lscache
 python_service/venv
 python_service/dataset.csv
-python_service/train_data
