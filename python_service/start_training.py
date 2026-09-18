@@ -87,7 +87,8 @@ def main():
         "--valInterval", "500",
         "--character", all_chars,
         "--saved_model", str(korean_g2_path),
-        "--FT"
+        "--FT",
+        "--workers", "0"
     ]
 
     # Run the training script in the dtrb directory
