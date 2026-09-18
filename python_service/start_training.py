@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import urllib.request
@@ -73,7 +74,7 @@ def main():
     time.sleep(3)
 
     cmd = [
-        "python", str(train_py),
+        sys.executable, str(train_py),
         "--train_data", str(data_path),
         "--valid_data", str(data_path),
         "--select_data", "/",
