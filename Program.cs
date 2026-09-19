@@ -14,11 +14,48 @@ const uint SWP_NOZORDER = 0x0004;
 int positionX = 0;
 int positionY = 0;
 
-string lastMessage = string.Empty;
-DateTime lastMessageTime = DateTime.MinValue;
 DateTime lastUnknownRaidTime = DateTime.MinValue;
 
 bool isSleeping = false;
+
+// 당일 알림 전송 이력 관리
+string historyFilePath = "daily_notified.txt";
+DateTime currentHistoryDate = DateTime.Today;
+HashSet<string> notifiedMissions = new HashSet<string>();
+
+// 파일에서 이력 불러오기
+if (File.Exists(historyFilePath))
+{
+    try
+    {
+        var lines = File.ReadAllLines(historyFilePath);
+        if (lines.Length > 0)
+        {
+            if (DateTime.TryParse(lines[0], out DateTime savedDate) && savedDate.Date == DateTime.Today)
+            {
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(lines[i]))
+                        notifiedMissions.Add(lines[i].Trim());
+                }
+            }
+            else
+            {
+                // 날짜가 다르면 파일 초기화
+                File.WriteAllText(historyFilePath, DateTime.Today.ToString("yyyy-MM-dd") + Environment.NewLine);
+            }
+        }
+    }
+    catch { }
+}
+else
+{
+    try
+    {
+        File.WriteAllText(historyFilePath, DateTime.Today.ToString("yyyy-MM-dd") + Environment.NewLine);
+    }
+    catch { }
+}
 
 try
 {
@@ -120,9 +157,17 @@ while (true)
 
     // --- 아래부터는 기존의 캡처 및 OCR 로직이 그대로 들어갑니다 ---
 
-    if (!string.IsNullOrEmpty(lastMessage) && (DateTime.Now - lastMessageTime).TotalMinutes >= 2)
+    // 자정이 지나면(날짜가 바뀌면) 이력 초기화
+    if (DateTime.Today != currentHistoryDate)
     {
-        lastMessage = string.Empty;
+        currentHistoryDate = DateTime.Today;
+        notifiedMissions.Clear();
+        try
+        {
+            File.WriteAllText(historyFilePath, currentHistoryDate.ToString("yyyy-MM-dd") + Environment.NewLine);
+        }
+        catch { }
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 자정이 지나 알림 이력이 초기화되었습니다.");
     }
 
     var bounds = windowTracker.GetWindowBounds(targetWindow);
@@ -167,11 +212,20 @@ while (true)
         }
         else if (category == "Success")
         {
-            if (extractedText != lastMessage || (DateTime.Now - lastMessageTime).TotalMinutes >= 2)
+            if (!notifiedMissions.Contains(extractedText))
             {
-                lastMessage = extractedText;
-                lastMessageTime = DateTime.Now;
+                notifiedMissions.Add(extractedText);
+                try
+                {
+                    File.AppendAllText(historyFilePath, extractedText + Environment.NewLine);
+                }
+                catch { }
+
                 _ = DiscordNotifier.SendMessageAsync($"잠시 후에 {extractedText}(이)가 시작됩니다.");
+            }
+            else
+            {
+                Console.WriteLine($"[알림 생략] 오늘 이미 알림이 전송된 습격전입니다: {extractedText}");
             }
         }
 
