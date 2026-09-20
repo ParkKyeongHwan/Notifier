@@ -20,6 +20,10 @@ echo [Info] 필요한 패키지를 설치합니다...
 pip install -r "%~dp0requirements.txt"
 pip install fire lmdb
 
+REM 1-0. dataset.csv 업데이트 (prepare_dataset.py)
+echo [Info] dataset.csv 파일을 최신화합니다...
+python "%~dp0prepare_dataset.py"
+
 REM 1. 데이터 준비 (auto_prepare_lmdb.py)
 python "%~dp0auto_prepare_lmdb.py"
 if %ERRORLEVEL% neq 0 (
