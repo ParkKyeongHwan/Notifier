@@ -62,25 +62,42 @@ class OCRModelStub:
             print("Warning: easyocr is not installed. Please pip install easyocr.")
 
     def load_known_labels(self, csv_path):
+        self.mission_dict = {}
+        self.people_count_dict = {}
+
+        ocr_corrector_path = Path(__file__).parent.parent / "OcrCorrector.cs"
+        if ocr_corrector_path.exists():
+            with open(ocr_corrector_path, 'r', encoding='utf-8-sig') as cs_file:
+                cs_content = cs_file.read()
+
+                # Extract MissionDictionary
+                dict_matches = re.findall(r'\{\s*"([^"]+)",\s*"([^"]+ 습격전 \([^)]+\))"\s*\}', cs_content)
+                for k, v in dict_matches:
+                    self.mission_dict[k] = v
+                    self.known_labels.add(v)
+
+                # Extract MissionPeopleCount
+                count_matches = re.findall(r'\{\s*"([^"]+ 습격전 \([^)]+\))",\s*(\d+)\s*\}', cs_content)
+                for k, v in count_matches:
+                    self.people_count_dict[k] = int(v)
+                    self.known_labels.add(k)
+
+                # Extract just labels if needed
+                matches = re.findall(r'"([^"]+ 습격전 \([^)]+\))"', cs_content)
+                if matches:
+                    self.known_labels.update(matches)
+
+            print(f"Loaded {len(self.mission_dict)} mission aliases and {len(self.people_count_dict)} people count mappings from OcrCorrector.cs")
+        else:
+            print("Could not find OcrCorrector.cs to load advanced labels.")
+
         if os.path.exists(csv_path):
             with open(csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     if "label" in row:
                         self.known_labels.add(row["label"])
-            print(f"Loaded {len(self.known_labels)} known labels from {csv_path}")
-        else:
-            print(f"Warning: {csv_path} not found. Loading defaults from C# code.")
-            ocr_corrector_path = Path(__file__).parent.parent / "OcrCorrector.cs"
-            if ocr_corrector_path.exists():
-                with open(ocr_corrector_path, 'r', encoding='utf-8-sig') as cs_file:
-                    cs_content = cs_file.read()
-                    matches = re.findall(r'"([^"]+ 습격전 \([^)]+\))"', cs_content)
-                    if matches:
-                        self.known_labels.update(matches)
-                        print(f"Loaded {len(matches)} known labels directly from OcrCorrector.cs")
-            else:
-                print("Could not find OcrCorrector.cs to load default labels.")
+            print(f"Loaded additional labels from {csv_path}, total unique labels: {len(self.known_labels)}")
 
         # Also load some ignored keywords to skip Assault
         self.ignored_keywords = [
@@ -92,6 +109,114 @@ class OCRModelStub:
             "트랜실", "정글", "달기지", "연구단지", "국지전"
         ]
 
+    def extract_mission_enhanced(self, raw_text):
+        import Levenshtein
+        clean_text = raw_text
+
+        # 2. Number extraction
+        extracted_count = -1
+        valid_counts = [150, 100, 50, 30, 20, 15, 10, 5, 3]
+
+        match = re.search(r'\d+', clean_text)
+        if match:
+            num = int(match.group())
+            if num in valid_counts:
+                extracted_count = num
+
+        if extracted_count == -1:
+            for count in valid_counts:
+                if str(count) in clean_text:
+                    if count == 50 and "150" in clean_text: continue
+                    if count == 10 and "100" in clean_text: continue
+                    if count == 15 and "150" in clean_text: continue
+                    extracted_count = count
+                    break
+
+        if extracted_count != -1:
+            candidate_missions = [k for k, v in self.people_count_dict.items() if v == extracted_count]
+
+            best_match_name = ""
+            best_error_count = 999
+
+            for candidate in candidate_missions:
+                keywords = [k for k, v in self.mission_dict.items() if v == candidate]
+                for target_keyword in keywords:
+                    allowed_errors = len(target_keyword) // 2
+
+                    if len(clean_text) < len(target_keyword):
+                        error_count = Levenshtein.distance(clean_text, target_keyword[:len(clean_text)])
+                        if error_count <= allowed_errors and error_count < best_error_count:
+                            best_error_count = error_count
+                            best_match_name = candidate
+                    else:
+                        for i in range(len(clean_text) - len(target_keyword) + 1):
+                            window = clean_text[i:i+len(target_keyword)]
+                            error_count = Levenshtein.distance(window, target_keyword)
+                            if error_count <= allowed_errors and error_count < best_error_count:
+                                best_error_count = error_count
+                                best_match_name = candidate
+
+            if best_match_name:
+                return {
+                    "result": best_match_name,
+                    "confidence": 1.0,
+                    "category": "Success",
+                    "message": f"인원수({extracted_count}명) 기반 매칭 성공"
+                }
+            else:
+                return {
+                    "result": f"알 수 없는 습격전 (상위 {extracted_count}명)",
+                    "confidence": 0.0,
+                    "category": "Unknown",
+                    "message": f"인원수({extracted_count}명)만 감지됨. 이름 매칭 실패"
+                }
+
+        # 3. Keyword sliding window matching
+        best_match_name = ""
+        best_error_count = 999
+
+        for target_keyword, full_name in self.mission_dict.items():
+            if len(clean_text) < len(target_keyword):
+                continue
+
+            for i in range(len(clean_text) - len(target_keyword) + 1):
+                window = clean_text[i:i+len(target_keyword)]
+                error_count = Levenshtein.distance(window, target_keyword)
+
+                allowed_errors = 0
+                if len(target_keyword) >= 5: allowed_errors = 2
+                elif len(target_keyword) >= 3: allowed_errors = 1
+
+                if error_count <= allowed_errors:
+                    if error_count == 0:
+                        return {
+                            "result": full_name,
+                            "confidence": 1.0,
+                            "category": "Success",
+                            "message": "완벽 매칭"
+                        }
+
+                    if error_count < best_error_count:
+                        best_error_count = error_count
+                        best_match_name = full_name
+
+        if best_match_name:
+            if best_match_name == "알 수 없는 습격전":
+                return {
+                    "result": best_match_name,
+                    "confidence": 0.0,
+                    "category": "Unknown",
+                    "message": f"오타 허용 범위({best_error_count}개) 내 알 수 없는 습격전 매칭"
+                }
+            return {
+                "result": best_match_name,
+                "confidence": 1.0,
+                "category": "Success",
+                "message": f"오타 허용 범위({best_error_count}개) 내 매칭"
+            }
+
+        return None
+
     def predict(self, image_bytes: bytes):
         if self.reader is None:
             return {
@@ -101,15 +226,10 @@ class OCRModelStub:
             }
 
         try:
-            # 1. Decode Image
             image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
             img_np = np.array(image)
 
-            # 2. Run EasyOCR
-            # readtext returns a list of tuples: (bounding_box, text, confidence)
             results = self.reader.readtext(img_np)
-
-            # Combine all extracted text into one string without spaces
             raw_text = "".join([res[1] for res in results]).replace(" ", "").replace("\n", "").replace("\r", "")
 
             print(f"EasyOCR Extracted Raw Text: {raw_text}")
@@ -121,49 +241,69 @@ class OCRModelStub:
                     "message": "No text detected."
                 }
 
-            # 3. Assault Check
+            # 3. Assault Check (Enhanced logic using Levenshtein to prevent numbers being caught first)
+            import Levenshtein
+            best_assault_match = ""
+            best_assault_len = -1
+
             for ignored in self.ignored_keywords:
-                if ignored in raw_text:
-                    return {
-                        "result": f"어설트 ({ignored})",
-                        "confidence": 1.0,
-                        "category": "Assault",
-                        "message": "예외 키워드(어설트) 감지"
-                    }
+                if len(raw_text) < len(ignored): continue
+                for i in range(len(raw_text) - len(ignored) + 1):
+                    window = raw_text[i:i+len(ignored)]
+                    allowed_errors = 0
+                    if len(ignored) >= 5: allowed_errors = 2
+                    elif len(ignored) >= 3: allowed_errors = 1
 
-            # 4. Fuzzy Matching with known labels
+                    if Levenshtein.distance(window, ignored) <= allowed_errors:
+                        if len(ignored) > best_assault_len or (len(ignored) == best_assault_len and ignored not in ["어설트", "침공"]):
+                            best_assault_match = ignored
+                            best_assault_len = len(ignored)
+
+            if best_assault_match:
+                return {
+                    "result": f"어설트 ({best_assault_match})",
+                    "confidence": 1.0,
+                    "category": "Assault",
+                    "message": "예외 키워드(어설트) 감지"
+                }
+
+            # Try the enhanced C# matching logic
+            enhanced_result = self.extract_mission_enhanced(raw_text)
+            if enhanced_result:
+                return enhanced_result
+
+            # 4. Fallback to Fuzzy Matching for anything else
             if self.known_labels:
-                # We use token_sort_ratio for robust matching
                 best_match, score = process.extractOne(raw_text, list(self.known_labels), scorer=fuzz.partial_ratio)
-
                 print(f"Best match: {best_match} (Score: {score})")
 
-                if score >= 75: # Threshold for considering it a success
+                if score >= 75:
                     return {
                         "result": best_match,
                         "confidence": score / 100.0,
                         "category": "Success",
                         "message": f"Fuzzy matching success (Score: {score})"
                     }
-                else:
-                    # Try to extract numbers (people count) as a fallback, BUT ONLY if '습' or '격' is present
-                    match = re.search(r'\d+', raw_text)
-                    if match and ("습격" in raw_text or "습" in raw_text or "격" in raw_text):
-                        num = match.group()
-                        return {
-                            "result": f"알 수 없는 습격전 (상위 {num}명)",
-                            "confidence": score / 100.0,
-                            "category": "Unknown",
-                            "message": f"Low match score ({score}), but extracted people count ({num}) and found '습' or '격'."
-                        }
 
             # Fallback
-            if "습격" in raw_text or "습" in raw_text or "격" in raw_text:
+            fallback_keyword = "습격"
+            if len(raw_text) >= len(fallback_keyword):
+                for i in range(len(raw_text) - len(fallback_keyword) + 1):
+                    window = raw_text[i:i+len(fallback_keyword)]
+                    if Levenshtein.distance(window, fallback_keyword) <= 1:
+                        return {
+                            "result": "알 수 없는 습격전",
+                            "confidence": 0.0,
+                            "category": "Unknown",
+                            "message": "'습격' 키워드 단독 감지"
+                        }
+
+            if "습" in raw_text or "격" in raw_text:
                  return {
                     "result": "알 수 없는 습격전",
                     "confidence": 0.0,
                     "category": "Unknown",
-                    "message": "Fallback: Found '습' or '격'."
+                    "message": "'습' 또는 '격' 1글자 감지"
                 }
 
             return {

@@ -197,6 +197,13 @@ while (true)
                 string playerNum = match.Groups[1].Value; // 추출된 숫자
                 extractedText = $"알 수 없는 습격전 (상위 {playerNum}명)";
             }
+
+            // 10분에 한 번씩만 "알 수 없는 습격전" 알림 전송
+            if ((DateTime.Now - lastUnknownRaidTime).TotalMinutes >= 10)
+            {
+                _ = DiscordNotifier.SendMessageAsync("잠시 후에 알 수 없는 습격전(이)가 시작됩니다.");
+                lastUnknownRaidTime = DateTime.Now;
+            }
         }
         else if (category == "Assault")
         {
