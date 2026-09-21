@@ -141,13 +141,19 @@ class OCRModelStub:
             for candidate in candidate_missions:
                 keywords = [k for k, v in self.mission_dict.items() if v == candidate]
                 for target_keyword in keywords:
-                    allowed_errors = len(target_keyword) // 2
+                    # 너무 짧은 텍스트가 잘못 매칭되는 것을 방지하기 위해 allowed_errors를 조금 더 엄격하게 조정
+                    # 5글자 이상이면 2, 3글자 이상이면 1, 그 이하는 0 (3. Keyword sliding window matching과 동일하게)
+                    allowed_errors = 0
+                    if len(target_keyword) >= 5: allowed_errors = 2
+                    elif len(target_keyword) >= 3: allowed_errors = 1
 
                     if len(clean_text) < len(target_keyword):
-                        error_count = Levenshtein.distance(clean_text, target_keyword[:len(clean_text)])
-                        if error_count <= allowed_errors and error_count < best_error_count:
-                            best_error_count = error_count
-                            best_match_name = candidate
+                        # 짧은 텍스트 매칭 시 최소한 타겟 키워드의 절반 이상은 입력되어야 함
+                        if len(clean_text) >= len(target_keyword) // 2:
+                            error_count = Levenshtein.distance(clean_text, target_keyword[:len(clean_text)])
+                            if error_count <= allowed_errors and error_count < best_error_count:
+                                best_error_count = error_count
+                                best_match_name = candidate
                     else:
                         for i in range(len(clean_text) - len(target_keyword) + 1):
                             window = clean_text[i:i+len(target_keyword)]
@@ -164,12 +170,27 @@ class OCRModelStub:
                     "message": f"인원수({extracted_count}명) 기반 매칭 성공"
                 }
             else:
-                return {
-                    "result": f"알 수 없는 습격전 (상위 {extracted_count}명)",
-                    "confidence": 0.0,
-                    "category": "Unknown",
-                    "message": f"인원수({extracted_count}명)만 감지됨. 이름 매칭 실패"
-                }
+                # 숫자만 감지되었을 경우 무조건 '알 수 없는 습격전'으로 판단하지 않도록 컨텍스트 확인
+                has_context = False
+                if "상위" in clean_text or "명" in clean_text or "습" in clean_text or "격" in clean_text:
+                    has_context = True
+                else:
+                    # '습격' 키워드에 대해 Levenshtein distance 1까지 허용 (e.g. 슥격, 습격 등)
+                    if len(clean_text) >= 2:
+                        for i in range(len(clean_text) - 1):
+                            window = clean_text[i:i+2]
+                            if Levenshtein.distance(window, "습격") <= 1:
+                                has_context = True
+                                break
+
+                if has_context:
+                    return {
+                        "result": f"알 수 없는 습격전 (상위 {extracted_count}명)",
+                        "confidence": 0.0,
+                        "category": "Unknown",
+                        "message": f"인원수({extracted_count}명) 및 컨텍스트 감지. 이름 매칭 실패"
+                    }
+                # 만약 컨텍스트가 전혀 없다면 단순 숫자로 판단하고 아래 로직(일반 매칭)으로 넘어감
 
         # 3. Keyword sliding window matching
         best_match_name = ""
