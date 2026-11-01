@@ -18,10 +18,10 @@ DateTime lastUnknownRaidTime = DateTime.MinValue;
 
 bool isSleeping = false;
 
-// 2시 이전은 전날로 취급하는 함수
+// 1시 이전은 전날로 취급하는 함수
 DateTime GetLogicalDate(DateTime time)
 {
-    return time.AddHours(-2).Date;
+    return time.AddHours(-1).Date;
 }
 
 // 당일 알림 전송 이력 관리
@@ -128,8 +128,8 @@ while (true)
 {
     DateTime now = DateTime.Now;
 
-    // 현재 시간이 동작 시간(19시~1시 59분)인지 체크 (24시간 모드면 항상 true)
-    bool isActiveTime = run24Hours || (now.Hour >= 19 || now.Hour < 2);
+    // 현재 시간이 동작 시간(19시~0시 59분)인지 체크 (24시간 모드면 항상 true)
+    bool isActiveTime = run24Hours || (now.Hour >= 19 || now.Hour < 1);
 
     if (!isActiveTime)
     {
@@ -163,7 +163,7 @@ while (true)
 
     // --- 아래부터는 기존의 캡처 및 OCR 로직이 그대로 들어갑니다 ---
 
-    // 새벽 2시가 지나면(논리적 날짜가 바뀌면) 이력 초기화
+    // 새벽 1시가 지나면(논리적 날짜가 바뀌면) 이력 초기화
     if (GetLogicalDate(DateTime.Now) != currentHistoryDate)
     {
         currentHistoryDate = GetLogicalDate(DateTime.Now);
@@ -173,7 +173,7 @@ while (true)
             File.WriteAllText(historyFilePath, currentHistoryDate.ToString("yyyy-MM-dd") + Environment.NewLine);
         }
         catch { }
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 새벽 2시가 지나 알림 이력이 초기화되었습니다.");
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 새벽 1시가 지나 알림 이력이 초기화되었습니다.");
     }
 
     var bounds = windowTracker.GetWindowBounds(targetWindow);
