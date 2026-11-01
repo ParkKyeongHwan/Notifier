@@ -18,9 +18,15 @@ DateTime lastUnknownRaidTime = DateTime.MinValue;
 
 bool isSleeping = false;
 
+// 1시 이전은 전날로 취급하는 함수
+DateTime GetLogicalDate(DateTime time)
+{
+    return time.AddHours(-1).Date;
+}
+
 // 당일 알림 전송 이력 관리
 string historyFilePath = "daily_notified.txt";
-DateTime currentHistoryDate = DateTime.Today;
+DateTime currentHistoryDate = GetLogicalDate(DateTime.Now);
 HashSet<string> notifiedMissions = new HashSet<string>();
 
 // 파일에서 이력 불러오기
@@ -31,7 +37,7 @@ if (File.Exists(historyFilePath))
         var lines = File.ReadAllLines(historyFilePath);
         if (lines.Length > 0)
         {
-            if (DateTime.TryParse(lines[0], out DateTime savedDate) && savedDate.Date == DateTime.Today)
+            if (DateTime.TryParse(lines[0], out DateTime savedDate) && savedDate.Date == GetLogicalDate(DateTime.Now))
             {
                 for (int i = 1; i < lines.Length; i++)
                 {
@@ -42,7 +48,7 @@ if (File.Exists(historyFilePath))
             else
             {
                 // 날짜가 다르면 파일 초기화
-                File.WriteAllText(historyFilePath, DateTime.Today.ToString("yyyy-MM-dd") + Environment.NewLine);
+                File.WriteAllText(historyFilePath, GetLogicalDate(DateTime.Now).ToString("yyyy-MM-dd") + Environment.NewLine);
             }
         }
     }
@@ -52,7 +58,7 @@ else
 {
     try
     {
-        File.WriteAllText(historyFilePath, DateTime.Today.ToString("yyyy-MM-dd") + Environment.NewLine);
+        File.WriteAllText(historyFilePath, GetLogicalDate(DateTime.Now).ToString("yyyy-MM-dd") + Environment.NewLine);
     }
     catch { }
 }
@@ -157,17 +163,17 @@ while (true)
 
     // --- 아래부터는 기존의 캡처 및 OCR 로직이 그대로 들어갑니다 ---
 
-    // 자정이 지나면(날짜가 바뀌면) 이력 초기화
-    if (DateTime.Today != currentHistoryDate)
+    // 새벽 1시가 지나면(논리적 날짜가 바뀌면) 이력 초기화
+    if (GetLogicalDate(DateTime.Now) != currentHistoryDate)
     {
-        currentHistoryDate = DateTime.Today;
+        currentHistoryDate = GetLogicalDate(DateTime.Now);
         notifiedMissions.Clear();
         try
         {
             File.WriteAllText(historyFilePath, currentHistoryDate.ToString("yyyy-MM-dd") + Environment.NewLine);
         }
         catch { }
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 자정이 지나 알림 이력이 초기화되었습니다.");
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 새벽 1시가 지나 알림 이력이 초기화되었습니다.");
     }
 
     var bounds = windowTracker.GetWindowBounds(targetWindow);
